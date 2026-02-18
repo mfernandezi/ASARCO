@@ -17,9 +17,11 @@ Definicion de dia operativo:
     como (Time - 21 horas).date().
 
 Formulas:
-  Horas_disponibles = Horas_totales - Mantencion_programada - Mantencion_no_programada
-  Disponibilidad(%) = Horas_disponibles / Horas_totales * 100
-  UEBD(%)          = Horas_efectivo / Horas_disponibles * 100
+  Horas_operativas      = Horas_totales - Mantencion_programada - Mantencion_no_programada
+  Disponibilidad_ratio  = Horas_operativas / Horas_totales
+  UEBD_ratio            = Horas_efectivo / Horas_operativas
+  Disponibilidad(%)     = Disponibilidad_ratio * 100
+  UEBD(%)               = UEBD_ratio * 100
 """
 
 from __future__ import annotations
@@ -51,8 +53,11 @@ DAILY_FIELDNAMES = [
     "horas_mant_programada",
     "horas_mant_no_programada",
     "horas_otras",
+    "horas_operativas",
     "horas_disponibles",
+    "disponibilidad_ratio",
     "disponibilidad_pct",
+    "uebd_ratio",
     "uebd_pct",
 ]
 
@@ -67,12 +72,15 @@ SUMMARY_BASE_FIELDS = [
     "horas_mant_programada",
     "horas_mant_no_programada",
     "horas_otras",
+    "horas_operativas",
     "horas_disponibles",
     "promedio_diario_efectivo_h",
     "promedio_diario_reserva_h",
     "promedio_diario_mant_programada_h",
     "promedio_diario_mant_no_programada_h",
+    "disponibilidad_ratio",
     "disponibilidad_pct",
+    "uebd_ratio",
     "uebd_pct",
 ]
 
@@ -144,12 +152,6 @@ def to_float(value: Optional[str]) -> Optional[float]:
         return None
 
 
-def pct(numerator: float, denominator: float) -> float:
-    if denominator <= 0:
-        return 0.0
-    return numerator / denominator * 100.0
-
-
 def build_daily_row(fecha_operativa: date, perforadora: str) -> Dict[str, float]:
     row: Dict[str, float] = {
         "fecha_operativa": fecha_operativa.isoformat(),
@@ -159,8 +161,11 @@ def build_daily_row(fecha_operativa: date, perforadora: str) -> Dict[str, float]
     }
     for key in METRIC_KEYS:
         row[key] = 0.0
+    row["horas_operativas"] = 0.0
     row["horas_disponibles"] = 0.0
+    row["disponibilidad_ratio"] = 0.0
     row["disponibilidad_pct"] = 0.0
+    row["uebd_ratio"] = 0.0
     row["uebd_pct"] = 0.0
     return row
 
@@ -201,12 +206,20 @@ def get_operational_day(row: Dict[str, str], start_dt: Optional[datetime]) -> Op
 
 
 def finalize_metrics(row: Dict[str, float]) -> None:
-    available_hours = (
+    operational_hours = (
         row["horas_totales"] - row["horas_mant_programada"] - row["horas_mant_no_programada"]
     )
-    row["horas_disponibles"] = max(available_hours, 0.0)
-    row["disponibilidad_pct"] = pct(row["horas_disponibles"], row["horas_totales"])
-    row["uebd_pct"] = pct(row["horas_efectivo"], row["horas_disponibles"])
+    row["horas_operativas"] = max(operational_hours, 0.0)
+    # Alias de compatibilidad (mismo valor que horas_operativas)
+    row["horas_disponibles"] = row["horas_operativas"]
+    row["disponibilidad_ratio"] = (
+        row["horas_operativas"] / row["horas_totales"] if row["horas_totales"] > 0 else 0.0
+    )
+    row["disponibilidad_pct"] = row["disponibilidad_ratio"] * 100.0
+    row["uebd_ratio"] = (
+        row["horas_efectivo"] / row["horas_operativas"] if row["horas_operativas"] > 0 else 0.0
+    )
+    row["uebd_pct"] = row["uebd_ratio"] * 100.0
 
 
 def load_daily_metrics(
@@ -298,12 +311,15 @@ def aggregate_period(
             }
             for metric in METRIC_KEYS:
                 record[metric] = 0.0
+            record["horas_operativas"] = 0.0
             record["horas_disponibles"] = 0.0
             record["promedio_diario_efectivo_h"] = 0.0
             record["promedio_diario_reserva_h"] = 0.0
             record["promedio_diario_mant_programada_h"] = 0.0
             record["promedio_diario_mant_no_programada_h"] = 0.0
+            record["disponibilidad_ratio"] = 0.0
             record["disponibilidad_pct"] = 0.0
+            record["uebd_ratio"] = 0.0
             record["uebd_pct"] = 0.0
             grouped[key] = record
 
@@ -322,10 +338,12 @@ def aggregate_period(
     )
 
     for rec in result:
-        available_hours = (
+        operational_hours = (
             rec["horas_totales"] - rec["horas_mant_programada"] - rec["horas_mant_no_programada"]
         )
-        rec["horas_disponibles"] = max(available_hours, 0.0)
+        rec["horas_operativas"] = max(operational_hours, 0.0)
+        # Alias de compatibilidad (mismo valor que horas_operativas)
+        rec["horas_disponibles"] = rec["horas_operativas"]
 
         days = max(int(rec["dias_con_datos"]), 1)
         rec["promedio_diario_efectivo_h"] = rec["horas_efectivo"] / days
@@ -333,8 +351,14 @@ def aggregate_period(
         rec["promedio_diario_mant_programada_h"] = rec["horas_mant_programada"] / days
         rec["promedio_diario_mant_no_programada_h"] = rec["horas_mant_no_programada"] / days
 
-        rec["disponibilidad_pct"] = pct(rec["horas_disponibles"], rec["horas_totales"])
-        rec["uebd_pct"] = pct(rec["horas_efectivo"], rec["horas_disponibles"])
+        rec["disponibilidad_ratio"] = (
+            rec["horas_operativas"] / rec["horas_totales"] if rec["horas_totales"] > 0 else 0.0
+        )
+        rec["disponibilidad_pct"] = rec["disponibilidad_ratio"] * 100.0
+        rec["uebd_ratio"] = (
+            rec["horas_efectivo"] / rec["horas_operativas"] if rec["horas_operativas"] > 0 else 0.0
+        )
+        rec["uebd_pct"] = rec["uebd_ratio"] * 100.0
 
     return result
 

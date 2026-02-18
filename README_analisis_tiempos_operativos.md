@@ -9,8 +9,9 @@ Este script procesa archivos de eventos de perforadoras (CSV con separador `;`) 
 
 Ademas calcula:
 
-- **Disponibilidad (%)**
-- **UEBD (%)**
+- **Horas Operativas**
+- **Disponibilidad** (ratio y %)
+- **UEBD** (ratio y %)
 
 ---
 
@@ -49,11 +50,14 @@ Reglas:
 
 ## 3) Formulas usadas
 
-- `horas_disponibles = horas_totales - horas_mant_programada - horas_mant_no_programada`
-- `disponibilidad_pct = horas_disponibles / horas_totales * 100`
-- `uebd_pct = horas_efectivo / horas_disponibles * 100`
+- `horas_operativas = horas_totales - horas_mant_programada - horas_mant_no_programada`
+- `disponibilidad_ratio = horas_operativas / horas_totales`
+- `uebd_ratio = horas_efectivo / horas_operativas`
+- `disponibilidad_pct = disponibilidad_ratio * 100`
+- `uebd_pct = uebd_ratio * 100`
 
 > Si el denominador es 0, el porcentaje se reporta como 0.
+> Se incluye tambien `horas_disponibles` como alias de compatibilidad con el mismo valor de `horas_operativas`.
 
 ---
 
