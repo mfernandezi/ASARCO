@@ -12,6 +12,7 @@ Ademas calcula:
 - **Horas Operativas**
 - **Disponibilidad** (ratio y %)
 - **UEBD** (ratio y %)
+- **Impacto por codigo** (para explicar caidas de Disponibilidad y UEBD)
 
 ---
 
@@ -78,6 +79,18 @@ Opcionalmente puedes definir carpeta de salida:
 python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --output-dir "salidas_analisis"
 ```
 
+Top de codigos para cascada (por defecto 10):
+
+```bash
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --top-n-codigos 12
+```
+
+Si quieres omitir PNG y dejar solo CSV:
+
+```bash
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --sin-graficos-cascada
+```
+
 ---
 
 ## 5) Archivos de salida
@@ -102,6 +115,18 @@ En la carpeta de salida se generan:
 5. `anual_flota.csv`
    - resumen anual total de flota
 
+6. `impacto_codigos_disponibilidad.csv`
+   - horas e impacto por codigo que reducen disponibilidad
+
+7. `impacto_codigos_uebd.csv`
+   - horas e impacto por codigo que reducen UEBD
+
+8. `graficos/cascada_disponibilidad_top_codigos.png`
+   - cascada Top N codigos de mayor impacto negativo en disponibilidad
+
+9. `graficos/cascada_uebd_top_codigos.png`
+   - cascada Top N codigos de mayor impacto negativo en UEBD
+
 ---
 
 ## 6) Encabezados esperados en el CSV
@@ -117,3 +142,15 @@ Columnas minimas requeridas:
 - `PlannedCodeName`
 
 Si faltan, el script devuelve error indicando cuales faltan.
+
+---
+
+## 7) Dependencia para graficos
+
+Los PNG de cascada usan `matplotlib`.
+
+Instalacion:
+
+```bash
+python3 -m pip install matplotlib
+```

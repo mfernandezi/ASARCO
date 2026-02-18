@@ -8,6 +8,8 @@ Lee un archivo CSV con separador ';' y genera:
   - Resumen anual por perforadora
   - Resumen mensual de flota
   - Resumen anual de flota
+  - Impacto por codigo para Disponibilidad y UEBD
+  - Graficos de cascada (Top N codigos de mayor impacto negativo)
 
 Definicion de dia operativo:
   - Turno A inicia a las 21:00
@@ -29,9 +31,10 @@ from __future__ import annotations
 import argparse
 import csv
 import unicodedata
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 METRIC_KEYS = [
     "horas_totales",
@@ -86,6 +89,18 @@ SUMMARY_BASE_FIELDS = [
     "uebd_ratio",
     "uebd_pct",
     "uebd_formula_usuario",
+]
+
+IMPACT_FIELDNAMES = [
+    "metrica",
+    "ranking",
+    "codigo",
+    "horas",
+    "impacto_ratio",
+    "impacto_pct_points",
+    "denominador_horas",
+    "valor_final_ratio",
+    "valor_final_pct",
 ]
 
 REQUIRED_COLUMNS = {
@@ -176,24 +191,54 @@ def build_daily_row(fecha_operativa: date, perforadora: str) -> Dict[str, float]
     return row
 
 
-def classify_and_add_hours(row: Dict[str, str], metrics: Dict[str, float], hours: float) -> None:
+def classify_bucket(row: Dict[str, str]) -> str:
     short_code = normalize_text(row.get("ShortCode"))
     planned = normalize_text(row.get("PlannedCodeName"))
     only_code_name = normalize_text(row.get("OnlyCodeName"))
 
-    metrics["horas_totales"] += hours
-
     if short_code == "efectivo" or only_code_name.startswith("efectivo_"):
-        metrics["horas_efectivo"] += hours
-        return
+        return "efectivo"
     if short_code == "reserva":
-        metrics["horas_reserva"] += hours
-        return
+        return "reserva"
     if short_code == "mantencion":
         if planned == "programada":
-            metrics["horas_mant_programada"] += hours
-        else:
-            metrics["horas_mant_no_programada"] += hours
+            return "mant_programada"
+        return "mant_no_programada"
+
+    return "otras"
+
+
+def build_code_label(row: Dict[str, str]) -> str:
+    code_number = (row.get("OnlyCodeNumber") or "").strip()
+    code_name = (row.get("OnlyCodeName") or "").strip()
+    code_name_alt = (row.get("CodeName") or "").strip()
+    delay_data = (row.get("DelayData") or "").strip()
+
+    if code_number and code_name:
+        return f"{code_number}_{code_name}"
+    if code_name:
+        return code_name
+    if code_name_alt:
+        return code_name_alt
+    if delay_data:
+        return delay_data
+    return "SIN_CODIGO"
+
+
+def classify_and_add_hours(bucket: str, metrics: Dict[str, float], hours: float) -> None:
+    metrics["horas_totales"] += hours
+
+    if bucket == "efectivo":
+        metrics["horas_efectivo"] += hours
+        return
+    if bucket == "reserva":
+        metrics["horas_reserva"] += hours
+        return
+    if bucket == "mant_programada":
+        metrics["horas_mant_programada"] += hours
+        return
+    if bucket == "mant_no_programada":
+        metrics["horas_mant_no_programada"] += hours
         return
 
     metrics["horas_otras"] += hours
@@ -236,8 +281,15 @@ def load_daily_metrics(
     input_csv: Path,
     delimiter: str = ";",
     encoding: str = "utf-8-sig",
-) -> Tuple[List[Dict[str, float]], Dict[str, int]]:
+) -> Tuple[List[Dict[str, float]], Dict[str, int], Dict[str, Any]]:
     daily: Dict[Tuple[date, str], Dict[str, float]] = {}
+    availability_impact_hours_by_code: Dict[str, float] = defaultdict(float)
+    uebd_impact_hours_by_code: Dict[str, float] = defaultdict(float)
+    impact_totals = {
+        "horas_totales": 0.0,
+        "horas_operativas": 0.0,
+        "horas_efectivo": 0.0,
+    }
     stats = {
         "rows_total": 0,
         "rows_without_operational_day": 0,
@@ -275,11 +327,24 @@ def load_daily_metrics(
                 stats["rows_without_operational_day"] += 1
                 continue
 
+            bucket = classify_bucket(row)
+            code_label = build_code_label(row)
+            impact_totals["horas_totales"] += duration_hours
+
+            if bucket in {"mant_programada", "mant_no_programada"}:
+                availability_impact_hours_by_code[code_label] += duration_hours
+            else:
+                impact_totals["horas_operativas"] += duration_hours
+                if bucket == "efectivo":
+                    impact_totals["horas_efectivo"] += duration_hours
+                else:
+                    uebd_impact_hours_by_code[code_label] += duration_hours
+
             key = (operational_day, rig_name)
             if key not in daily:
                 daily[key] = build_daily_row(operational_day, rig_name)
 
-            classify_and_add_hours(row, daily[key], duration_hours)
+            classify_and_add_hours(bucket, daily[key], duration_hours)
 
     rows = sorted(
         daily.values(),
@@ -288,7 +353,13 @@ def load_daily_metrics(
     for row in rows:
         finalize_metrics(row)
 
-    return rows, stats
+    impact_data: Dict[str, Any] = {
+        "availability_impact_hours_by_code": dict(availability_impact_hours_by_code),
+        "uebd_impact_hours_by_code": dict(uebd_impact_hours_by_code),
+        "totals": impact_totals,
+    }
+
+    return rows, stats, impact_data
 
 
 def aggregate_period(
@@ -379,6 +450,141 @@ def aggregate_period(
     return result
 
 
+def build_impact_rows(
+    metrica: str,
+    hours_by_code: Dict[str, float],
+    denominator_hours: float,
+    final_ratio: float,
+) -> List[Dict[str, float]]:
+    if denominator_hours <= 0:
+        return []
+
+    sorted_items = sorted(hours_by_code.items(), key=lambda item: item[1], reverse=True)
+    rows: List[Dict[str, float]] = []
+    for idx, (code, hours) in enumerate(sorted_items, start=1):
+        impact_ratio = hours / denominator_hours
+        rows.append(
+            {
+                "metrica": metrica,
+                "ranking": idx,
+                "codigo": code,
+                "horas": hours,
+                "impacto_ratio": impact_ratio,
+                "impacto_pct_points": impact_ratio * 100.0,
+                "denominador_horas": denominator_hours,
+                "valor_final_ratio": final_ratio,
+                "valor_final_pct": final_ratio * 100.0,
+            }
+        )
+    return rows
+
+
+def clip_label(text: str, max_len: int = 28) -> str:
+    clean = text.strip()
+    if len(clean) <= max_len:
+        return clean
+    return f"{clean[: max_len - 3]}..."
+
+
+def get_top_contributions(
+    hours_by_code: Dict[str, float],
+    denominator_hours: float,
+    top_n: int,
+) -> List[Tuple[str, float]]:
+    if denominator_hours <= 0:
+        return []
+
+    sorted_items = sorted(hours_by_code.items(), key=lambda item: item[1], reverse=True)
+    top = sorted_items[:top_n]
+    other_hours = sum(hours for _, hours in sorted_items[top_n:])
+
+    contributions: List[Tuple[str, float]] = []
+    for code, hours in top:
+        # Contribucion en puntos porcentuales a la disminucion (signo negativo).
+        impact_pp = (hours / denominator_hours) * 100.0
+        contributions.append((clip_label(code), -impact_pp))
+
+    if other_hours > 0:
+        impact_pp = (other_hours / denominator_hours) * 100.0
+        contributions.append(("Otros", -impact_pp))
+
+    return contributions
+
+
+def try_import_pyplot():
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        return plt, ""
+    except Exception as exc:  # pragma: no cover
+        return None, str(exc)
+
+
+def generate_waterfall_chart(
+    output_path: Path,
+    title: str,
+    subtitle: str,
+    contributions: List[Tuple[str, float]],
+    final_ratio: float,
+) -> Tuple[bool, str]:
+    plt, err = try_import_pyplot()
+    if plt is None:
+        return False, err
+
+    labels = ["Base 100%"] + [label for label, _ in contributions] + ["Resultado"]
+    final_pct = final_ratio * 100.0
+    fig_width = max(10.0, len(labels) * 0.9)
+    fig, ax = plt.subplots(figsize=(fig_width, 6.0))
+
+    x_base = 0
+    ax.bar(x_base, 100.0, bottom=0.0, color="#2ca02c", edgecolor="black")
+    ax.text(x_base, 101.0, "100.0", ha="center", va="bottom", fontsize=8)
+
+    running = 100.0
+    for idx, (_label, delta_pp) in enumerate(contributions, start=1):
+        next_value = running + delta_pp
+        bottom = min(running, next_value)
+        height = abs(delta_pp)
+        color = "#d62728" if delta_pp < 0 else "#2ca02c"
+        ax.bar(idx, height, bottom=bottom, color=color, edgecolor="black")
+        ax.text(
+            idx,
+            bottom + height + 0.8,
+            f"{delta_pp:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+        ax.plot([idx - 1 + 0.35, idx - 0.35], [running, running], color="gray", linewidth=0.8)
+        running = next_value
+
+    final_idx = len(labels) - 1
+    ax.plot(
+        [final_idx - 1 + 0.35, final_idx - 0.35],
+        [running, running],
+        color="gray",
+        linewidth=0.8,
+    )
+    ax.bar(final_idx, final_pct, bottom=0.0, color="#1f77b4", edgecolor="black")
+    ax.text(final_idx, final_pct + 1.0, f"{final_pct:.2f}", ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks(list(range(len(labels))))
+    ax.set_xticklabels(labels, rotation=40, ha="right")
+    ax.set_ylabel("Puntos porcentuales (%)")
+    ax.set_title(f"{title}\n{subtitle}")
+    ax.axhline(0.0, color="black", linewidth=1.0)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return True, ""
+
+
 def format_value(value) -> str:
     if isinstance(value, float):
         return f"{value:.4f}"
@@ -419,6 +625,17 @@ def parse_args() -> argparse.Namespace:
         default="utf-8-sig",
         help="Encoding del CSV de entrada (por defecto utf-8-sig).",
     )
+    parser.add_argument(
+        "--top-n-codigos",
+        type=int,
+        default=10,
+        help="Cantidad de codigos a mostrar en los graficos de cascada.",
+    )
+    parser.add_argument(
+        "--sin-graficos-cascada",
+        action="store_true",
+        help="No generar graficos de cascada (solo CSV de impacto por codigo).",
+    )
     return parser.parse_args()
 
 
@@ -426,11 +643,12 @@ def main() -> int:
     args = parse_args()
     input_csv: Path = args.input_csv
     output_dir: Path = args.output_dir
+    top_n_codigos = max(int(args.top_n_codigos), 1)
 
     if not input_csv.exists():
         raise FileNotFoundError(f"No existe el archivo de entrada: {input_csv}")
 
-    daily_rows, stats = load_daily_metrics(
+    daily_rows, stats, impact_data = load_daily_metrics(
         input_csv=input_csv,
         delimiter=args.delimiter,
         encoding=args.encoding,
@@ -449,6 +667,76 @@ def main() -> int:
     write_csv(output_dir / "mensual_flota.csv", monthly_fleet, monthly_fields)
     write_csv(output_dir / "anual_flota.csv", yearly_fleet, yearly_fields)
 
+    totals = impact_data["totals"]
+    total_hours = float(totals.get("horas_totales", 0.0))
+    operational_hours = float(totals.get("horas_operativas", 0.0))
+    effective_hours = float(totals.get("horas_efectivo", 0.0))
+
+    disponibilidad_ratio = operational_hours / total_hours if total_hours > 0 else 0.0
+    uebd_ratio = effective_hours / operational_hours if operational_hours > 0 else 0.0
+
+    availability_impact_rows = build_impact_rows(
+        metrica="disponibilidad",
+        hours_by_code=impact_data["availability_impact_hours_by_code"],
+        denominator_hours=total_hours,
+        final_ratio=disponibilidad_ratio,
+    )
+    uebd_impact_rows = build_impact_rows(
+        metrica="uebd",
+        hours_by_code=impact_data["uebd_impact_hours_by_code"],
+        denominator_hours=operational_hours,
+        final_ratio=uebd_ratio,
+    )
+    write_csv(
+        output_dir / "impacto_codigos_disponibilidad.csv",
+        availability_impact_rows,
+        IMPACT_FIELDNAMES,
+    )
+    write_csv(
+        output_dir / "impacto_codigos_uebd.csv",
+        uebd_impact_rows,
+        IMPACT_FIELDNAMES,
+    )
+
+    chart_messages: List[str] = []
+    if not args.sin_graficos_cascada:
+        availability_contrib = get_top_contributions(
+            impact_data["availability_impact_hours_by_code"],
+            total_hours,
+            top_n_codigos,
+        )
+        uebd_contrib = get_top_contributions(
+            impact_data["uebd_impact_hours_by_code"],
+            operational_hours,
+            top_n_codigos,
+        )
+
+        ok_disp, err_disp = generate_waterfall_chart(
+            output_path=output_dir / "graficos" / "cascada_disponibilidad_top_codigos.png",
+            title="Cascada de codigos que reducen Disponibilidad",
+            subtitle=f"Top {top_n_codigos} + Otros | Base: 100%",
+            contributions=availability_contrib,
+            final_ratio=disponibilidad_ratio,
+        )
+        ok_uebd, err_uebd = generate_waterfall_chart(
+            output_path=output_dir / "graficos" / "cascada_uebd_top_codigos.png",
+            title="Cascada de codigos que reducen UEBD",
+            subtitle=f"Top {top_n_codigos} + Otros | Base: 100%",
+            contributions=uebd_contrib,
+            final_ratio=uebd_ratio,
+        )
+
+        if ok_disp:
+            chart_messages.append("Grafico cascada disponibilidad: generado")
+        else:
+            chart_messages.append(f"Grafico cascada disponibilidad: omitido ({err_disp})")
+        if ok_uebd:
+            chart_messages.append("Grafico cascada UEBD: generado")
+        else:
+            chart_messages.append(f"Grafico cascada UEBD: omitido ({err_uebd})")
+    else:
+        chart_messages.append("Graficos de cascada deshabilitados por parametro.")
+
     print("Analisis finalizado.")
     print(f"Archivo de entrada: {input_csv}")
     print(f"Carpeta de salida: {output_dir}")
@@ -458,6 +746,10 @@ def main() -> int:
     print(f"Registros diarios (dia+perforadora): {len(daily_rows)}")
     print(f"Resumen mensual por perforadora: {len(monthly_by_rig)} filas")
     print(f"Resumen anual por perforadora: {len(yearly_by_rig)} filas")
+    print(f"Impacto codigos disponibilidad: {len(availability_impact_rows)} filas")
+    print(f"Impacto codigos UEBD: {len(uebd_impact_rows)} filas")
+    for msg in chart_messages:
+        print(msg)
     return 0
 
 
