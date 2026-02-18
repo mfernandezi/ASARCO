@@ -57,8 +57,10 @@ DAILY_FIELDNAMES = [
     "horas_disponibles",
     "disponibilidad_ratio",
     "disponibilidad_pct",
+    "disponibilidad_formula_usuario",
     "uebd_ratio",
     "uebd_pct",
+    "uebd_formula_usuario",
 ]
 
 SUMMARY_BASE_FIELDS = [
@@ -80,8 +82,10 @@ SUMMARY_BASE_FIELDS = [
     "promedio_diario_mant_no_programada_h",
     "disponibilidad_ratio",
     "disponibilidad_pct",
+    "disponibilidad_formula_usuario",
     "uebd_ratio",
     "uebd_pct",
+    "uebd_formula_usuario",
 ]
 
 REQUIRED_COLUMNS = {
@@ -165,8 +169,10 @@ def build_daily_row(fecha_operativa: date, perforadora: str) -> Dict[str, float]
     row["horas_disponibles"] = 0.0
     row["disponibilidad_ratio"] = 0.0
     row["disponibilidad_pct"] = 0.0
+    row["disponibilidad_formula_usuario"] = 0.0
     row["uebd_ratio"] = 0.0
     row["uebd_pct"] = 0.0
+    row["uebd_formula_usuario"] = 0.0
     return row
 
 
@@ -216,10 +222,14 @@ def finalize_metrics(row: Dict[str, float]) -> None:
         row["horas_operativas"] / row["horas_totales"] if row["horas_totales"] > 0 else 0.0
     )
     row["disponibilidad_pct"] = row["disponibilidad_ratio"] * 100.0
+    # Formula indicada por usuario: (Horas Operativas / Horas Totales) / 100
+    row["disponibilidad_formula_usuario"] = row["disponibilidad_ratio"] / 100.0
     row["uebd_ratio"] = (
         row["horas_efectivo"] / row["horas_operativas"] if row["horas_operativas"] > 0 else 0.0
     )
     row["uebd_pct"] = row["uebd_ratio"] * 100.0
+    # Formula indicada por usuario: (Horas Efectivas / Horas Operativas) / 100
+    row["uebd_formula_usuario"] = row["uebd_ratio"] / 100.0
 
 
 def load_daily_metrics(
@@ -319,8 +329,10 @@ def aggregate_period(
             record["promedio_diario_mant_no_programada_h"] = 0.0
             record["disponibilidad_ratio"] = 0.0
             record["disponibilidad_pct"] = 0.0
+            record["disponibilidad_formula_usuario"] = 0.0
             record["uebd_ratio"] = 0.0
             record["uebd_pct"] = 0.0
+            record["uebd_formula_usuario"] = 0.0
             grouped[key] = record
 
         rec = grouped[key]
@@ -355,10 +367,14 @@ def aggregate_period(
             rec["horas_operativas"] / rec["horas_totales"] if rec["horas_totales"] > 0 else 0.0
         )
         rec["disponibilidad_pct"] = rec["disponibilidad_ratio"] * 100.0
+        # Formula indicada por usuario: (Horas Operativas / Horas Totales) / 100
+        rec["disponibilidad_formula_usuario"] = rec["disponibilidad_ratio"] / 100.0
         rec["uebd_ratio"] = (
             rec["horas_efectivo"] / rec["horas_operativas"] if rec["horas_operativas"] > 0 else 0.0
         )
         rec["uebd_pct"] = rec["uebd_ratio"] * 100.0
+        # Formula indicada por usuario: (Horas Efectivas / Horas Operativas) / 100
+        rec["uebd_formula_usuario"] = rec["uebd_ratio"] / 100.0
 
     return result
 

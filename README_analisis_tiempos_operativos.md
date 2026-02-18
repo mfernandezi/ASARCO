@@ -55,6 +55,9 @@ Reglas:
 - `uebd_ratio = horas_efectivo / horas_operativas`
 - `disponibilidad_pct = disponibilidad_ratio * 100`
 - `uebd_pct = uebd_ratio * 100`
+- **Formula solicitada por usuario**:
+  - `disponibilidad_formula_usuario = (horas_operativas / horas_totales) / 100`
+  - `uebd_formula_usuario = (horas_efectivo / horas_operativas) / 100`
 
 > Si el denominador es 0, el porcentaje se reporta como 0.
 > Se incluye tambien `horas_disponibles` como alias de compatibilidad con el mismo valor de `horas_operativas`.
