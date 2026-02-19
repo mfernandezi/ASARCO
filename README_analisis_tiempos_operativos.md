@@ -240,6 +240,7 @@ Este script hace exactamente el enfoque de brecha:
    - UEBD (por codigo)
    - Rendimiento F09 (filtrado por `DrillPlan` contiene `F09`)
    - Malla (manual, via parametro)
+7. Comparacion mensual objetivo vs real (cuando se entrega mensual 2026)
 
 ### Ejecucion minima (con nombres por defecto)
 
@@ -291,12 +292,27 @@ En `salidas_brecha_2025_vs_feb2026/`:
 - `resumen_brecha_2025_vs_feb2026.csv`
 - `aporte_gap_uebd_por_codigo.csv`
 - `aporte_gap_disponibilidad_por_codigo.csv`
+- `top_aporte_gap_uebd_por_codigo.csv`
+- `top_aporte_gap_disponibilidad_por_codigo.csv`
 - `perdida_rendimiento_f09_por_codigo.csv`
+- `comparacion_mensual_objetivo_vs_real.csv`
+- `resumen_perdidas_reales_componentes.csv`
 - `diario_baseline_2025.csv`
 - `diario_comparado_feb2026.csv`
 - `graficos/cascada_brecha_uebd_codigos.png`
 - `graficos/cascada_brecha_disponibilidad_codigos.png`
+- `graficos/mensual_uebd_objetivo_vs_real.png`
+- `graficos/mensual_disp_objetivo_vs_real.png`
+- `graficos/mensual_gap_uebd_pp.png`
+- `graficos/top_codigos_impacto_uebd.png`
+- `graficos/top_codigos_impacto_disponibilidad.png`
 - `reporte_brecha_2025_vs_feb2026.xlsx`
+
+El Excel ahora incluye hojas y graficos mas claros para:
+
+- Comparacion mensual objetivo vs real
+- Top codigos con mayor impacto UEBD/Disponibilidad
+- Resumen de perdidas reales por componente
 
 ---
 

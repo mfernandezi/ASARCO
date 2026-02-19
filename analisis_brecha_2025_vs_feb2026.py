@@ -40,6 +40,21 @@ from comparador_mensual_perforadoras import (
 DEFAULT_2025_FILE = "DispUEBD_AllRigs_010125-0000_031225-2359"
 DEFAULT_2026_FILE = "DispUEBD_AllRigs_010126-0000_170226-2100"
 
+MONTH_NAME_BY_NUM = {
+    1: "Enero",
+    2: "Febrero",
+    3: "Marzo",
+    4: "Abril",
+    5: "Mayo",
+    6: "Junio",
+    7: "Julio",
+    8: "Agosto",
+    9: "Septiembre",
+    10: "Octubre",
+    11: "Noviembre",
+    12: "Diciembre",
+}
+
 
 def normalize_text(value: Optional[str]) -> str:
     text = (value or "").strip().lower()
@@ -304,6 +319,70 @@ def aggregate_daily_data(
     }
 
 
+def aggregate_monthly_from_daily_rows(
+    daily_rows: Iterable[Dict[str, Any]],
+    target_year: int,
+) -> List[Dict[str, Any]]:
+    grouped: Dict[int, Dict[str, float]] = {}
+    for row in daily_rows:
+        d = parse_date(row.get("fecha_operativa"))
+        if d is None or d.year != target_year:
+            continue
+        m = d.month
+        if m not in grouped:
+            grouped[m] = {
+                "dias": 0.0,
+                "horas_totales": 0.0,
+                "horas_operativas": 0.0,
+                "horas_efectivo": 0.0,
+                "horas_reserva": 0.0,
+                "horas_mant_programada": 0.0,
+                "horas_mant_no_programada": 0.0,
+                "horas_otras": 0.0,
+            }
+        rec = grouped[m]
+        rec["dias"] += 1.0
+        rec["horas_totales"] += float(row.get("horas_totales", 0.0))
+        rec["horas_operativas"] += float(row.get("horas_operativas", 0.0))
+        rec["horas_efectivo"] += float(row.get("horas_efectivo", 0.0))
+        rec["horas_reserva"] += float(row.get("horas_reserva", 0.0))
+        rec["horas_mant_programada"] += float(row.get("horas_mant_programada", 0.0))
+        rec["horas_mant_no_programada"] += float(row.get("horas_mant_no_programada", 0.0))
+        rec["horas_otras"] += float(row.get("horas_otras", 0.0))
+
+    rows: List[Dict[str, Any]] = []
+    for m in sorted(grouped):
+        rec = grouped[m]
+        ht = rec["horas_totales"]
+        hop = rec["horas_operativas"]
+        he = rec["horas_efectivo"]
+        uebd_ratio = he / hop if hop > 0 else 0.0
+        disp_ratio = hop / ht if ht > 0 else 0.0
+        util_ratio = he / ht if ht > 0 else 0.0
+        rows.append(
+            {
+                "anio": target_year,
+                "mes_num": m,
+                "mes": MONTH_NAME_BY_NUM.get(m, str(m)),
+                "dias_con_datos": int(rec["dias"]),
+                "horas_totales": ht,
+                "horas_operativas": hop,
+                "horas_efectivo": he,
+                "horas_reserva": rec["horas_reserva"],
+                "horas_mant_programada": rec["horas_mant_programada"],
+                "horas_mant_no_programada": rec["horas_mant_no_programada"],
+                "horas_otras": rec["horas_otras"],
+                "disponibilidad_ratio_real": disp_ratio,
+                "disponibilidad_pct_real": disp_ratio * 100.0,
+                "utilizacion_ratio_real": util_ratio,
+                "utilizacion_pct_real": util_ratio * 100.0,
+                "uebd_ratio_real": uebd_ratio,
+                "uebd_pct_real": uebd_ratio * 100.0,
+            }
+        )
+    return rows
+
+
 def read_table_any(path: Path, sheet_name: Optional[str] = None) -> List[Dict[str, Any]]:
     if path.suffix.lower() == ".csv":
         with path.open("r", encoding="utf-8-sig", newline="") as f:
@@ -434,17 +513,70 @@ def extract_monthly_targets(
     return {"uebd_ratio": uebd_ratio, "disp_ratio": disp_ratio}
 
 
-def extract_targets_from_mensual_a1(
+def build_monthly_targets_from_long_table(
+    mensual_path: Path,
+    year: int,
+    sheet_name: Optional[str] = None,
+    rig_preference: str = "TOTAL",
+) -> List[Dict[str, Any]]:
+    table = read_table_any(mensual_path, sheet_name=sheet_name)
+    if not table:
+        return []
+
+    headers = list(table[0].keys())
+    col_year = find_col(headers, ["anio", "year"])
+    col_month = find_col(headers, ["mes", "month"])
+    col_uebd = find_col(headers, ["uebd"])
+    col_disp = find_col(headers, ["disponibilidad", "disp"])
+    col_util = find_col(headers, ["utilizacion", "utilización", "util"])
+    col_rig = find_col(headers, ["perforadora", "rig", "equipo", "flota", "total"])
+    if not col_year or not col_month:
+        return []
+
+    preferred_norm = normalize_text(rig_preference)
+    grouped: Dict[int, Dict[str, Any]] = {}
+    for row in table:
+        row_year = to_float(row.get(col_year))
+        row_month = parse_month_value(row.get(col_month))
+        if row_year is None or row_month is None:
+            continue
+        if int(row_year) != int(year):
+            continue
+
+        rig_val = normalize_text(row.get(col_rig)) if col_rig else ""
+        is_preferred = (
+            rig_val == preferred_norm
+            or (preferred_norm == "total" and rig_val in {"total", "flota"})
+            or (not col_rig)
+        )
+        if not is_preferred:
+            continue
+
+        uebd_ratio = parse_ratio_value(to_float(row.get(col_uebd))) if col_uebd else None
+        disp_ratio = parse_ratio_value(to_float(row.get(col_disp))) if col_disp else None
+        util_ratio = parse_ratio_value(to_float(row.get(col_util))) if col_util else None
+        grouped[row_month] = {
+            "anio": year,
+            "mes_num": row_month,
+            "mes": MONTH_NAME_BY_NUM.get(row_month, str(row_month)),
+            "disponibilidad_ratio_obj": disp_ratio,
+            "disponibilidad_pct_obj": (disp_ratio * 100.0) if disp_ratio is not None else None,
+            "utilizacion_ratio_obj": util_ratio,
+            "utilizacion_pct_obj": (util_ratio * 100.0) if util_ratio is not None else None,
+            "uebd_ratio_obj": uebd_ratio,
+            "uebd_pct_obj": (uebd_ratio * 100.0) if uebd_ratio is not None else None,
+        }
+
+    return [grouped[m] for m in sorted(grouped)]
+
+
+def build_monthly_targets_from_mensual_a1(
     mensual_a1_path: Path,
     compare_year: int,
-    compare_month: int,
     sheet_name: Optional[str],
     excluded_equipos_csv: str,
-) -> Dict[str, Optional[float]]:
-    """
-    Extrae objetivos desde mensual A1 (wide format) recalculando totales sin equipos excluidos.
-    Devuelve disponibilidad y UEBD objetivo para el mes comparado.
-    """
+) -> Dict[str, Any]:
+    """Devuelve objetivos mensuales (disp/util/uebd) desde mensual A1 recalculado."""
     resolved_path = resolve_mensual_a1_file(mensual_a1_path)
     records = parse_mensual_records(
         read_mensual_a1_table(resolved_path, sheet_name),
@@ -461,38 +593,157 @@ def extract_targets_from_mensual_a1(
         source_year=compare_year,
     )
 
-    disp_pct = None
-    util_pct = None
-    uebd_ratio_direct = None
+    by_month: Dict[int, Dict[str, Any]] = {}
     for row in rec_rows:
-        if int(row.get("mes_num", 0)) != int(compare_month):
-            continue
+        month_num = int(row.get("mes_num", 0))
+        if month_num not in by_month:
+            by_month[month_num] = {
+                "anio": compare_year,
+                "mes_num": month_num,
+                "mes": MONTH_NAME_BY_NUM.get(month_num, str(month_num)),
+                "disponibilidad_ratio_obj": None,
+                "disponibilidad_pct_obj": None,
+                "utilizacion_ratio_obj": None,
+                "utilizacion_pct_obj": None,
+                "uebd_ratio_obj": None,
+                "uebd_pct_obj": None,
+            }
+
         idx = str(row.get("indice_key", "")).strip().lower()
         val = to_float(row.get("valor_total_recalculado_sin_excluidas"))
         if val is None:
             continue
         if idx == "disponibilidad":
-            disp_pct = val
+            ratio = parse_ratio_value(val)
+            by_month[month_num]["disponibilidad_ratio_obj"] = ratio
+            by_month[month_num]["disponibilidad_pct_obj"] = (ratio * 100.0) if ratio is not None else None
         elif idx == "utilizacion":
-            util_pct = val
+            ratio = parse_ratio_value(val)
+            by_month[month_num]["utilizacion_ratio_obj"] = ratio
+            by_month[month_num]["utilizacion_pct_obj"] = (ratio * 100.0) if ratio is not None else None
         elif idx == "uebd":
-            uebd_ratio_direct = parse_ratio_value(val)
+            ratio = parse_ratio_value(val)
+            by_month[month_num]["uebd_ratio_obj"] = ratio
+            by_month[month_num]["uebd_pct_obj"] = (ratio * 100.0) if ratio is not None else None
 
-    disp_ratio = parse_ratio_value(disp_pct)
-    util_ratio = parse_ratio_value(util_pct)
+    for month_num, rec in by_month.items():
+        # Si UEBD no viene explicito, usar Utilizacion / Disponibilidad.
+        if rec["uebd_ratio_obj"] is None:
+            util = rec["utilizacion_ratio_obj"]
+            disp = rec["disponibilidad_ratio_obj"]
+            if util is not None and disp is not None and disp > 0:
+                rec["uebd_ratio_obj"] = util / disp
+                rec["uebd_pct_obj"] = rec["uebd_ratio_obj"] * 100.0
 
-    # Si UEBD no viene como indice explicito en mensual, se aproxima como Utilizacion / Disponibilidad.
-    if uebd_ratio_direct is None and util_ratio is not None and disp_ratio is not None and disp_ratio > 0:
-        uebd_ratio = util_ratio / disp_ratio
-    else:
-        uebd_ratio = uebd_ratio_direct
+    rows = [by_month[m] for m in sorted(by_month)]
+    return {"rows": rows, "source_path": str(resolved_path)}
+
+
+def extract_targets_from_mensual_a1(
+    mensual_a1_path: Path,
+    compare_year: int,
+    compare_month: int,
+    sheet_name: Optional[str],
+    excluded_equipos_csv: str,
+) -> Dict[str, Optional[float]]:
+    """
+    Extrae objetivos desde mensual A1 (wide format) recalculando totales sin equipos excluidos.
+    Devuelve disponibilidad y UEBD objetivo para el mes comparado.
+    """
+    monthly_targets = build_monthly_targets_from_mensual_a1(
+        mensual_a1_path=mensual_a1_path,
+        compare_year=compare_year,
+        sheet_name=sheet_name,
+        excluded_equipos_csv=excluded_equipos_csv,
+    )
+    target_rows = monthly_targets["rows"]
+    target_row = next((r for r in target_rows if int(r.get("mes_num", 0)) == int(compare_month)), None)
+    if target_row is None:
+        return {
+            "uebd_ratio": None,
+            "disp_ratio": None,
+            "util_ratio": None,
+            "source_path": monthly_targets["source_path"],
+            "rows": target_rows,
+        }
 
     return {
-        "uebd_ratio": uebd_ratio,
-        "disp_ratio": disp_ratio,
-        "util_ratio": util_ratio,
-        "source_path": str(resolved_path),
+        "uebd_ratio": target_row.get("uebd_ratio_obj"),
+        "disp_ratio": target_row.get("disponibilidad_ratio_obj"),
+        "util_ratio": target_row.get("utilizacion_ratio_obj"),
+        "source_path": monthly_targets["source_path"],
+        "rows": target_rows,
     }
+
+
+def build_monthly_comparison_rows(
+    monthly_real_rows: List[Dict[str, Any]],
+    monthly_target_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    real_by_month = {int(r["mes_num"]): r for r in monthly_real_rows}
+    target_by_month = {int(r["mes_num"]): r for r in monthly_target_rows}
+    months = sorted(set(real_by_month) | set(target_by_month))
+    rows: List[Dict[str, Any]] = []
+    for m in months:
+        real = real_by_month.get(m, {})
+        obj = target_by_month.get(m, {})
+        uebd_obj = obj.get("uebd_ratio_obj")
+        disp_obj = obj.get("disponibilidad_ratio_obj")
+        util_obj = obj.get("utilizacion_ratio_obj")
+        uebd_real = real.get("uebd_ratio_real")
+        disp_real = real.get("disponibilidad_ratio_real")
+        util_real = real.get("utilizacion_ratio_real")
+
+        uebd_gap_pp = (
+            (uebd_obj - uebd_real) * 100.0
+            if (uebd_obj is not None and uebd_real is not None)
+            else None
+        )
+        disp_gap_pp = (
+            (disp_obj - disp_real) * 100.0
+            if (disp_obj is not None and disp_real is not None)
+            else None
+        )
+        util_gap_pp = (
+            (util_obj - util_real) * 100.0
+            if (util_obj is not None and util_real is not None)
+            else None
+        )
+
+        hor_op = float(real.get("horas_operativas", 0.0) or 0.0)
+        hor_tot = float(real.get("horas_totales", 0.0) or 0.0)
+        perdida_uebd_h = (max(uebd_gap_pp, 0.0) / 100.0 * hor_op) if uebd_gap_pp is not None else None
+        perdida_disp_h = (max(disp_gap_pp, 0.0) / 100.0 * hor_tot) if disp_gap_pp is not None else None
+
+        rows.append(
+            {
+                "anio": int(real.get("anio", obj.get("anio", 0) or 0)),
+                "mes_num": m,
+                "mes": MONTH_NAME_BY_NUM.get(m, str(m)),
+                "dias_reales_con_datos": int(real.get("dias_con_datos", 0) or 0),
+                "horas_totales_real": float(real.get("horas_totales", 0.0) or 0.0),
+                "horas_operativas_real": float(real.get("horas_operativas", 0.0) or 0.0),
+                "horas_efectivo_real": float(real.get("horas_efectivo", 0.0) or 0.0),
+                "disponibilidad_obj_ratio": disp_obj,
+                "disponibilidad_obj_pct": (disp_obj * 100.0) if disp_obj is not None else None,
+                "disponibilidad_real_ratio": disp_real,
+                "disponibilidad_real_pct": (disp_real * 100.0) if disp_real is not None else None,
+                "disponibilidad_gap_pp": disp_gap_pp,
+                "utilizacion_obj_ratio": util_obj,
+                "utilizacion_obj_pct": (util_obj * 100.0) if util_obj is not None else None,
+                "utilizacion_real_ratio": util_real,
+                "utilizacion_real_pct": (util_real * 100.0) if util_real is not None else None,
+                "utilizacion_gap_pp": util_gap_pp,
+                "uebd_obj_ratio": uebd_obj,
+                "uebd_obj_pct": (uebd_obj * 100.0) if uebd_obj is not None else None,
+                "uebd_real_ratio": uebd_real,
+                "uebd_real_pct": (uebd_real * 100.0) if uebd_real is not None else None,
+                "uebd_gap_pp": uebd_gap_pp,
+                "perdida_horas_uebd_mes": perdida_uebd_h,
+                "perdida_horas_disponibilidad_mes": perdida_disp_h,
+            }
+        )
+    return rows
 
 
 def build_code_delta_rows(
@@ -545,7 +796,17 @@ def attribute_gap_to_codes(
         perdida_hpd = impacto_pp / 100.0 * denominator_hpd
         row["perdida_horas_dia_atribuida"] = perdida_hpd
         row["perdida_horas_mes_atribuida"] = perdida_hpd * compared_days
-    return delta_rows
+
+    ordered = sorted(delta_rows, key=lambda r: r.get("impacto_atribuido_pp", 0.0), reverse=True)
+    total_impact = sum(max(float(r.get("impacto_atribuido_pp", 0.0)), 0.0) for r in ordered)
+    acum = 0.0
+    for idx, row in enumerate(ordered, start=1):
+        imp = max(float(row.get("impacto_atribuido_pp", 0.0)), 0.0)
+        acum += imp
+        row["ranking_impacto"] = idx
+        row["participacion_gap_pct"] = (imp / total_impact * 100.0) if total_impact > 0 else 0.0
+        row["impacto_acumulado_pp"] = acum
+    return ordered
 
 
 def sum_field(rows: Iterable[Dict[str, float]], field: str) -> float:
@@ -635,6 +896,111 @@ def draw_gap_waterfall(
     return True, ""
 
 
+def draw_monthly_obj_vs_real_lines(
+    output_path: Path,
+    rows: List[Dict[str, Any]],
+    obj_key_pct: str,
+    real_key_pct: str,
+    title: str,
+) -> Tuple[bool, str]:
+    plt, err = try_import_pyplot()
+    if plt is None:
+        return False, err
+    if not rows:
+        return False, "Sin datos mensuales para comparar"
+
+    xs = [str(r.get("mes", r.get("mes_num", ""))) for r in rows]
+    obj_vals = [float(v) if v is not None else float("nan") for v in (r.get(obj_key_pct) for r in rows)]
+    real_vals = [float(v) if v is not None else float("nan") for v in (r.get(real_key_pct) for r in rows)]
+
+    x_idx = list(range(len(xs)))
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    ax.plot(x_idx, obj_vals, marker="o", linewidth=2, label="Objetivo mensual")
+    ax.plot(x_idx, real_vals, marker="o", linewidth=2, label="Real eventos")
+    ax.set_xticks(x_idx)
+    ax.set_xticklabels(xs, rotation=25, ha="right")
+    ax.set_ylabel("%")
+    ax.set_title(title)
+    ax.grid(alpha=0.3, linestyle="--")
+    ax.legend()
+    fig.tight_layout()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return True, ""
+
+
+def draw_monthly_gap_bars(
+    output_path: Path,
+    rows: List[Dict[str, Any]],
+    gap_key_pp: str,
+    title: str,
+) -> Tuple[bool, str]:
+    plt, err = try_import_pyplot()
+    if plt is None:
+        return False, err
+    if not rows:
+        return False, "Sin datos mensuales para gap"
+
+    xs = [str(r.get("mes", r.get("mes_num", ""))) for r in rows]
+    vals = [float(r.get(gap_key_pp) or 0.0) for r in rows]
+    x_idx = list(range(len(xs)))
+
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    colors = ["#d62728" if v > 0 else "#2ca02c" for v in vals]
+    ax.bar(x_idx, vals, color=colors, edgecolor="black")
+    for i, v in enumerate(vals):
+        ax.text(i, v + (0.2 if v >= 0 else -0.2), f"{v:.2f}", ha="center", va="bottom" if v >= 0 else "top", fontsize=8)
+    ax.set_xticks(x_idx)
+    ax.set_xticklabels(xs, rotation=25, ha="right")
+    ax.set_ylabel("Gap (pp)")
+    ax.set_title(title)
+    ax.axhline(0, color="black", linewidth=1)
+    ax.grid(axis="y", alpha=0.3, linestyle="--")
+    fig.tight_layout()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return True, ""
+
+
+def draw_top_code_impact_bars(
+    output_path: Path,
+    rows: List[Dict[str, Any]],
+    title: str,
+    top_n: int = 15,
+) -> Tuple[bool, str]:
+    plt, err = try_import_pyplot()
+    if plt is None:
+        return False, err
+
+    top_rows = [r for r in rows if float(r.get("impacto_atribuido_pp", 0.0)) > 0][:top_n]
+    if not top_rows:
+        return False, "Sin datos positivos para graficar"
+
+    labels = [str(r.get("codigo", "")) for r in top_rows][::-1]
+    vals = [float(r.get("impacto_atribuido_pp", 0.0)) for r in top_rows][::-1]
+
+    fig, ax = plt.subplots(figsize=(11, max(5.0, len(labels) * 0.45)))
+    bars = ax.barh(range(len(labels)), vals, color="#d62728", edgecolor="black")
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels)
+    ax.set_xlabel("Impacto atribuido (pp)")
+    ax.set_title(title)
+    ax.grid(axis="x", alpha=0.3, linestyle="--")
+    for i, b in enumerate(bars):
+        v = vals[i]
+        ax.text(v + 0.05, b.get_y() + b.get_height() / 2, f"{v:.2f}", va="center", fontsize=8)
+    fig.tight_layout()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return True, ""
+
+
 def try_import_xlsxwriter():
     try:
         import xlsxwriter
@@ -652,6 +1018,8 @@ def write_excel(
     f09_rows: List[Dict[str, Any]],
     daily_2025_rows: List[Dict[str, Any]],
     daily_feb_rows: List[Dict[str, Any]],
+    monthly_comparison_rows: List[Dict[str, Any]],
+    perdidas_resumen_rows: List[Dict[str, Any]],
 ) -> Tuple[bool, str]:
     xlsxwriter, err = try_import_xlsxwriter()
     if xlsxwriter is None:
@@ -667,7 +1035,7 @@ def write_excel(
         ws = wb.add_worksheet(name[:31])
         if not rows:
             ws.write(0, 0, "Sin datos")
-            return ws
+            return ws, []
         cols = list(rows[0].keys())
         for c, col in enumerate(cols):
             ws.write(0, c, col, header_fmt)
@@ -683,14 +1051,141 @@ def write_excel(
                     ws.write(r, c, str(val))
         for c, col in enumerate(cols):
             ws.set_column(c, c, max(12, min(42, len(col) + 2)))
-        return ws
+        return ws, cols
 
-    add_sheet("Resumen_Brecha", resumen_rows)
+    ws_resumen, cols_resumen = add_sheet("Resumen_Brecha", resumen_rows)
+    ws_cmp, cols_cmp = add_sheet("Comparacion_Mensual", monthly_comparison_rows)
+    ws_perd, cols_perd = add_sheet("Perdidas_Resumen", perdidas_resumen_rows)
+
+    top_uebd = [r for r in uebd_rows if float(r.get("impacto_atribuido_pp", 0.0)) > 0][:20]
+    top_disp = [r for r in disp_rows if float(r.get("impacto_atribuido_pp", 0.0)) > 0][:20]
+    ws_top_uebd, cols_top_uebd = add_sheet("Top_UEBD_Codigos", top_uebd)
+    ws_top_disp, cols_top_disp = add_sheet("Top_Disp_Codigos", top_disp)
+
     add_sheet("Aporte_UEBD_Codigos", uebd_rows)
     add_sheet("Aporte_Disp_Codigos", disp_rows)
     add_sheet("Perdida_F09_Codigos", f09_rows)
     add_sheet("Diario_2025", daily_2025_rows)
     add_sheet("Diario_Feb2026", daily_feb_rows)
+
+    if monthly_comparison_rows:
+        last = len(monthly_comparison_rows)
+        c_mes = cols_cmp.index("mes")
+        c_uebd_obj = cols_cmp.index("uebd_obj_pct")
+        c_uebd_real = cols_cmp.index("uebd_real_pct")
+        c_uebd_gap = cols_cmp.index("uebd_gap_pp")
+        c_disp_obj = cols_cmp.index("disponibilidad_obj_pct")
+        c_disp_real = cols_cmp.index("disponibilidad_real_pct")
+
+        chart_uebd = wb.add_chart({"type": "line"})
+        chart_uebd.add_series(
+            {
+                "name": "UEBD Objetivo (%)",
+                "categories": ["Comparacion_Mensual", 1, c_mes, last, c_mes],
+                "values": ["Comparacion_Mensual", 1, c_uebd_obj, last, c_uebd_obj],
+            }
+        )
+        chart_uebd.add_series(
+            {
+                "name": "UEBD Real (%)",
+                "categories": ["Comparacion_Mensual", 1, c_mes, last, c_mes],
+                "values": ["Comparacion_Mensual", 1, c_uebd_real, last, c_uebd_real],
+            }
+        )
+        chart_uebd.set_title({"name": "UEBD mensual: Objetivo vs Real"})
+        chart_uebd.set_y_axis({"name": "%"})
+        chart_uebd.set_legend({"position": "bottom"})
+        ws_cmp.insert_chart("AA2", chart_uebd, {"x_scale": 1.15, "y_scale": 1.1})
+
+        chart_disp = wb.add_chart({"type": "line"})
+        chart_disp.add_series(
+            {
+                "name": "Disp Objetivo (%)",
+                "categories": ["Comparacion_Mensual", 1, c_mes, last, c_mes],
+                "values": ["Comparacion_Mensual", 1, c_disp_obj, last, c_disp_obj],
+            }
+        )
+        chart_disp.add_series(
+            {
+                "name": "Disp Real (%)",
+                "categories": ["Comparacion_Mensual", 1, c_mes, last, c_mes],
+                "values": ["Comparacion_Mensual", 1, c_disp_real, last, c_disp_real],
+            }
+        )
+        chart_disp.set_title({"name": "Disponibilidad mensual: Objetivo vs Real"})
+        chart_disp.set_y_axis({"name": "%"})
+        chart_disp.set_legend({"position": "bottom"})
+        ws_cmp.insert_chart("AA22", chart_disp, {"x_scale": 1.15, "y_scale": 1.1})
+
+        chart_gap = wb.add_chart({"type": "column"})
+        chart_gap.add_series(
+            {
+                "name": "Gap UEBD (pp)",
+                "categories": ["Comparacion_Mensual", 1, c_mes, last, c_mes],
+                "values": ["Comparacion_Mensual", 1, c_uebd_gap, last, c_uebd_gap],
+            }
+        )
+        chart_gap.set_title({"name": "Gap mensual UEBD (pp)"})
+        chart_gap.set_y_axis({"name": "pp"})
+        ws_cmp.insert_chart("AA42", chart_gap, {"x_scale": 1.15, "y_scale": 1.1})
+
+    if top_uebd:
+        last = len(top_uebd)
+        c_code = cols_top_uebd.index("codigo")
+        c_impact = cols_top_uebd.index("impacto_atribuido_pp")
+        chart_top_uebd = wb.add_chart({"type": "bar"})
+        chart_top_uebd.add_series(
+            {
+                "name": "Impacto UEBD (pp)",
+                "categories": ["Top_UEBD_Codigos", 1, c_code, last, c_code],
+                "values": ["Top_UEBD_Codigos", 1, c_impact, last, c_impact],
+            }
+        )
+        chart_top_uebd.set_title({"name": "Top codigos impacto UEBD"})
+        chart_top_uebd.set_x_axis({"name": "pp"})
+        ws_top_uebd.insert_chart("L2", chart_top_uebd, {"x_scale": 1.2, "y_scale": 1.25})
+
+    if top_disp:
+        last = len(top_disp)
+        c_code = cols_top_disp.index("codigo")
+        c_impact = cols_top_disp.index("impacto_atribuido_pp")
+        chart_top_disp = wb.add_chart({"type": "bar"})
+        chart_top_disp.add_series(
+            {
+                "name": "Impacto Disp (pp)",
+                "categories": ["Top_Disp_Codigos", 1, c_code, last, c_code],
+                "values": ["Top_Disp_Codigos", 1, c_impact, last, c_impact],
+            }
+        )
+        chart_top_disp.set_title({"name": "Top codigos impacto Disponibilidad"})
+        chart_top_disp.set_x_axis({"name": "pp"})
+        ws_top_disp.insert_chart("L2", chart_top_disp, {"x_scale": 1.2, "y_scale": 1.25})
+
+    if perdidas_resumen_rows:
+        last = len(perdidas_resumen_rows)
+        c_cat = cols_perd.index("concepto")
+        c_horas = cols_perd.index("horas_perdidas")
+        chart_loss = wb.add_chart({"type": "column"})
+        chart_loss.add_series(
+            {
+                "name": "Horas perdidas",
+                "categories": ["Perdidas_Resumen", 1, c_cat, last, c_cat],
+                "values": ["Perdidas_Resumen", 1, c_horas, last, c_horas],
+            }
+        )
+        chart_loss.set_title({"name": "Perdidas reales por componente"})
+        chart_loss.set_y_axis({"name": "Horas"})
+        ws_perd.insert_chart("H2", chart_loss, {"x_scale": 1.2, "y_scale": 1.1})
+
+    # Mini dashboard en resumen
+    if resumen_rows:
+        row0 = resumen_rows[0]
+        ws_resumen.write(3, 30, "UEBD Objetivo (%)", header_fmt)
+        ws_resumen.write(4, 30, "UEBD Real (%)", header_fmt)
+        ws_resumen.write(5, 30, "Gap UEBD (pp)", header_fmt)
+        ws_resumen.write_number(3, 31, float(row0.get("uebd_objetivo_pct", 0.0)), pct_fmt)
+        ws_resumen.write_number(4, 31, float(row0.get("uebd_real_pct", 0.0)), pct_fmt)
+        ws_resumen.write_number(5, 31, float(row0.get("uebd_gap_pp", 0.0)), pct_fmt)
 
     wb.close()
     return True, ""
@@ -763,7 +1258,9 @@ def main() -> int:
     path_2026 = resolve_input_csv_path(args.input_2026)
 
     base = aggregate_daily_data(path_2025, filter_year=2025, filter_month=None)
+    comp_year = aggregate_daily_data(path_2026, filter_year=args.compare_year, filter_month=None)
     comp = aggregate_daily_data(path_2026, filter_year=args.compare_year, filter_month=args.compare_month)
+    monthly_real_rows = aggregate_monthly_from_daily_rows(comp_year["daily_rows"], args.compare_year)
 
     uebd_obj = parse_ratio_value(args.uebd_objetivo)
     disp_obj = parse_ratio_value(args.disp_objetivo)
@@ -771,6 +1268,7 @@ def main() -> int:
     source_disp = "argumento"
     source_util = ""
     util_obj = None
+    monthly_target_rows: List[Dict[str, Any]] = []
 
     if args.mensual_2026 is not None:
         mensual_path = args.mensual_2026
@@ -781,6 +1279,12 @@ def main() -> int:
                     mensual_path = c
                     break
         if mensual_path.exists():
+            monthly_target_rows = build_monthly_targets_from_long_table(
+                mensual_path=mensual_path,
+                year=args.compare_year,
+                sheet_name=args.mensual_2026_sheet,
+                rig_preference=args.mensual_rig,
+            )
             extracted = extract_monthly_targets(
                 mensual_path=mensual_path,
                 year=args.compare_year,
@@ -804,6 +1308,8 @@ def main() -> int:
                 sheet_name=args.mensual_a1_sheet,
                 excluded_equipos_csv=args.mensual_a1_exclude_equipos,
             )
+            if extracted_a1.get("rows"):
+                monthly_target_rows = extracted_a1["rows"]
             util_obj = extracted_a1.get("util_ratio")
             if util_obj is not None:
                 source_util = f"mensual_a1:{Path(extracted_a1['source_path']).name}"
@@ -848,6 +1354,14 @@ def main() -> int:
     perdida_horas_uebd = uebd_gap_pp / 100.0 * avg_oper_hpd * compared_days
     perdida_horas_rendimiento_f09 = sum(float(r["perdida_horas_mes"]) for r in f09_rows if r["delta_horas_dia_positivo"] > 0)
     perdida_horas_malla = max(float(args.horas_perdida_malla), 0.0)
+    monthly_comparison_rows = build_monthly_comparison_rows(monthly_real_rows, monthly_target_rows)
+
+    perdidas_resumen_rows = [
+        {"concepto": "Perdida por disponibilidad", "horas_perdidas": perdida_horas_disponibilidad},
+        {"concepto": "Perdida por UEBD", "horas_perdidas": perdida_horas_uebd},
+        {"concepto": "Perdida por rendimiento F09", "horas_perdidas": perdida_horas_rendimiento_f09},
+        {"concepto": "Perdida por malla", "horas_perdidas": perdida_horas_malla},
+    ]
 
     resumen = [
         {
@@ -883,6 +1397,7 @@ def main() -> int:
             "utilizacion_objetivo_ratio": util_obj if util_obj is not None else "",
             "utilizacion_objetivo_pct": (util_obj * 100.0) if util_obj is not None else "",
             "fuente_objetivo_utilizacion": source_util,
+            "meses_con_comparacion_mensual": len(monthly_comparison_rows),
             "suma_impactos_uebd_pp": sum_field(uebd_attr_rows, "impacto_atribuido_pp"),
             "suma_impactos_disponibilidad_pp": sum_field(disp_attr_rows, "impacto_atribuido_pp"),
         }
@@ -900,6 +1415,7 @@ def main() -> int:
         output_dir / "aporte_gap_uebd_por_codigo.csv",
         uebd_attr_rows,
         [
+            "ranking_impacto",
             "codigo",
             "baseline_horas_dia",
             "comparado_horas_dia",
@@ -908,6 +1424,8 @@ def main() -> int:
             "impacto_raw_pp",
             "factor_escalamiento",
             "impacto_atribuido_pp",
+            "participacion_gap_pct",
+            "impacto_acumulado_pp",
             "perdida_horas_dia_atribuida",
             "perdida_horas_mes_atribuida",
         ],
@@ -916,6 +1434,7 @@ def main() -> int:
         output_dir / "aporte_gap_disponibilidad_por_codigo.csv",
         disp_attr_rows,
         [
+            "ranking_impacto",
             "codigo",
             "baseline_horas_dia",
             "comparado_horas_dia",
@@ -924,8 +1443,36 @@ def main() -> int:
             "impacto_raw_pp",
             "factor_escalamiento",
             "impacto_atribuido_pp",
+            "participacion_gap_pct",
+            "impacto_acumulado_pp",
             "perdida_horas_dia_atribuida",
             "perdida_horas_mes_atribuida",
+        ],
+    )
+    write_csv(
+        output_dir / "top_aporte_gap_uebd_por_codigo.csv",
+        [r for r in uebd_attr_rows if float(r.get("impacto_atribuido_pp", 0.0)) > 0][:20],
+        [
+            "ranking_impacto",
+            "codigo",
+            "impacto_atribuido_pp",
+            "participacion_gap_pct",
+            "impacto_acumulado_pp",
+            "perdida_horas_mes_atribuida",
+            "delta_horas_dia_positivo",
+        ],
+    )
+    write_csv(
+        output_dir / "top_aporte_gap_disponibilidad_por_codigo.csv",
+        [r for r in disp_attr_rows if float(r.get("impacto_atribuido_pp", 0.0)) > 0][:20],
+        [
+            "ranking_impacto",
+            "codigo",
+            "impacto_atribuido_pp",
+            "participacion_gap_pct",
+            "impacto_acumulado_pp",
+            "perdida_horas_mes_atribuida",
+            "delta_horas_dia_positivo",
         ],
     )
     write_csv(
@@ -958,6 +1505,41 @@ def main() -> int:
             "disponibilidad_ratio",
             "disponibilidad_pct",
         ],
+    )
+    write_csv(
+        output_dir / "comparacion_mensual_objetivo_vs_real.csv",
+        monthly_comparison_rows,
+        [
+            "anio",
+            "mes_num",
+            "mes",
+            "dias_reales_con_datos",
+            "horas_totales_real",
+            "horas_operativas_real",
+            "horas_efectivo_real",
+            "disponibilidad_obj_ratio",
+            "disponibilidad_obj_pct",
+            "disponibilidad_real_ratio",
+            "disponibilidad_real_pct",
+            "disponibilidad_gap_pp",
+            "utilizacion_obj_ratio",
+            "utilizacion_obj_pct",
+            "utilizacion_real_ratio",
+            "utilizacion_real_pct",
+            "utilizacion_gap_pp",
+            "uebd_obj_ratio",
+            "uebd_obj_pct",
+            "uebd_real_ratio",
+            "uebd_real_pct",
+            "uebd_gap_pp",
+            "perdida_horas_uebd_mes",
+            "perdida_horas_disponibilidad_mes",
+        ],
+    )
+    write_csv(
+        output_dir / "resumen_perdidas_reales_componentes.csv",
+        perdidas_resumen_rows,
+        ["concepto", "horas_perdidas"],
     )
     write_csv(
         output_dir / "diario_comparado_feb2026.csv",
@@ -1002,6 +1584,63 @@ def main() -> int:
         chart_messages.append(
             "Cascada Disponibilidad: generado" if ok_d else f"Cascada Disponibilidad: omitido ({err_d})"
         )
+        ok_line_u, err_line_u = draw_monthly_obj_vs_real_lines(
+            output_path=output_dir / "graficos" / "mensual_uebd_objetivo_vs_real.png",
+            rows=monthly_comparison_rows,
+            obj_key_pct="uebd_obj_pct",
+            real_key_pct="uebd_real_pct",
+            title="UEBD mensual: objetivo vs real",
+        )
+        chart_messages.append(
+            "Grafico mensual UEBD objetivo vs real: generado"
+            if ok_line_u
+            else f"Grafico mensual UEBD objetivo vs real: omitido ({err_line_u})"
+        )
+        ok_line_d, err_line_d = draw_monthly_obj_vs_real_lines(
+            output_path=output_dir / "graficos" / "mensual_disp_objetivo_vs_real.png",
+            rows=monthly_comparison_rows,
+            obj_key_pct="disponibilidad_obj_pct",
+            real_key_pct="disponibilidad_real_pct",
+            title="Disponibilidad mensual: objetivo vs real",
+        )
+        chart_messages.append(
+            "Grafico mensual disponibilidad objetivo vs real: generado"
+            if ok_line_d
+            else f"Grafico mensual disponibilidad objetivo vs real: omitido ({err_line_d})"
+        )
+        ok_gap, err_gap = draw_monthly_gap_bars(
+            output_path=output_dir / "graficos" / "mensual_gap_uebd_pp.png",
+            rows=monthly_comparison_rows,
+            gap_key_pp="uebd_gap_pp",
+            title="Gap mensual UEBD (pp)",
+        )
+        chart_messages.append(
+            "Grafico mensual gap UEBD: generado"
+            if ok_gap
+            else f"Grafico mensual gap UEBD: omitido ({err_gap})"
+        )
+        ok_top_u, err_top_u = draw_top_code_impact_bars(
+            output_path=output_dir / "graficos" / "top_codigos_impacto_uebd.png",
+            rows=uebd_attr_rows,
+            title="Top codigos que explican perdida UEBD (pp)",
+            top_n=max(args.top_codigos_grafico, 10),
+        )
+        chart_messages.append(
+            "Grafico top codigos UEBD: generado"
+            if ok_top_u
+            else f"Grafico top codigos UEBD: omitido ({err_top_u})"
+        )
+        ok_top_d, err_top_d = draw_top_code_impact_bars(
+            output_path=output_dir / "graficos" / "top_codigos_impacto_disponibilidad.png",
+            rows=disp_attr_rows,
+            title="Top codigos que explican perdida Disponibilidad (pp)",
+            top_n=max(args.top_codigos_grafico, 10),
+        )
+        chart_messages.append(
+            "Grafico top codigos disponibilidad: generado"
+            if ok_top_d
+            else f"Grafico top codigos disponibilidad: omitido ({err_top_d})"
+        )
     else:
         chart_messages.append("Graficos deshabilitados por parametro.")
 
@@ -1015,6 +1654,8 @@ def main() -> int:
             f09_rows=f09_rows,
             daily_2025_rows=base["daily_rows"],
             daily_feb_rows=comp["daily_rows"],
+            monthly_comparison_rows=monthly_comparison_rows,
+            perdidas_resumen_rows=perdidas_resumen_rows,
         )
         excel_message = (
             "Excel: generado (reporte_brecha_2025_vs_feb2026.xlsx)"
@@ -1039,6 +1680,7 @@ def main() -> int:
         "Suma impactos atribuidos Disponibilidad: "
         f"{sum_field(disp_attr_rows, 'impacto_atribuido_pp'):.4f} pp"
     )
+    print(f"Meses con comparacion mensual objetivo vs real: {len(monthly_comparison_rows)}")
     print(f"Perdida horas Disponibilidad: {perdida_horas_disponibilidad:.2f}")
     print(f"Perdida horas UEBD: {perdida_horas_uebd:.2f}")
     print(f"Perdida horas Rendimiento F09: {perdida_horas_rendimiento_f09:.2f}")
