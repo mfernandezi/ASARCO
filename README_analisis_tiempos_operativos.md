@@ -315,19 +315,19 @@ Script:
 ### Uso (con tus nombres)
 
 ```bash
-python3 comparador_mensual_perforadoras.py "MENSUAL 2025 (1)" "MENSUAL 2026"
+python3 comparador_mensual_perforadoras.py "Planes MENSUALES 2025 (1)" "MENSUAL 2026"
 ```
 
 ### Especificar hoja (si no es la primera)
 
 ```bash
-python3 comparador_mensual_perforadoras.py "MENSUAL 2025 (1).xlsx" "MENSUAL 2026.xlsx" --sheet-2025 "Hoja1" --sheet-2026 "Hoja1"
+python3 comparador_mensual_perforadoras.py "Planes MENSUALES 2025 (1).xlsx" "MENSUAL 2026.xlsx" --sheet-2025 "Hoja1" --sheet-2026 "Hoja1"
 ```
 
 ### Cambiar equipos excluidos
 
 ```bash
-python3 comparador_mensual_perforadoras.py "MENSUAL 2025 (1)" "MENSUAL 2026" --exclude-equipos "PF03,PFAR"
+python3 comparador_mensual_perforadoras.py "Planes MENSUALES 2025 (1)" "MENSUAL 2026" --exclude-equipos "PF03,PFAR"
 ```
 
 ### Archivos de salida
