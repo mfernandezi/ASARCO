@@ -286,3 +286,58 @@ En `salidas_brecha_2025_vs_feb2026/`:
 - `graficos/cascada_brecha_uebd_codigos.png`
 - `graficos/cascada_brecha_disponibilidad_codigos.png`
 - `reporte_brecha_2025_vs_feb2026.xlsx`
+
+---
+
+## 9) Comparador mensual 2025 vs 2026 (formato A1)
+
+Se incluye un script adicional para leer tus mensuales en formato:
+
+- A1: `Equipo`
+- B1: `Indices`
+- C1: `Unidad`
+- D1 en adelante: meses (`Enero`, `Febrero`, ...)
+
+Script:
+
+- `comparador_mensual_perforadoras.py`
+
+### Que hace
+
+1. Compara mensuales por perforadora entre 2025 y 2026.
+2. Omite equipos excluidos (por defecto: `PF03, PFAR, PARR`).
+3. Recalcula totales mensuales SIN esos equipos.
+4. Entrega comparacion de:
+   - Total recalculado 2025 vs total original 2025
+   - Total recalculado 2026 vs total original 2026
+   - Total recalculado 2025 vs 2026
+
+### Uso (con tus nombres)
+
+```bash
+python3 comparador_mensual_perforadoras.py "MENSUAL 2025 (1)" "MENSUAL 2026"
+```
+
+### Especificar hoja (si no es la primera)
+
+```bash
+python3 comparador_mensual_perforadoras.py "MENSUAL 2025 (1).xlsx" "MENSUAL 2026.xlsx" --sheet-2025 "Hoja1" --sheet-2026 "Hoja1"
+```
+
+### Cambiar equipos excluidos
+
+```bash
+python3 comparador_mensual_perforadoras.py "MENSUAL 2025 (1)" "MENSUAL 2026" --exclude-equipos "PF03,PFAR"
+```
+
+### Archivos de salida
+
+En `salidas_comparador_mensual/`:
+
+- `mensual_comparado_por_perforadora.csv`
+- `totales_recalculados_sin_excluidas_2025.csv`
+- `totales_recalculados_sin_excluidas_2026.csv`
+- `totales_2025_vs_original_2025.csv`
+- `totales_2026_vs_original_2026.csv`
+- `totales_recalculados_2025_vs_2026.csv`
+- `reporte_mensual_comparado_sin_excluidas.xlsx`
