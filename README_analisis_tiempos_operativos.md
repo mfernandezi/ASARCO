@@ -213,3 +213,76 @@ python3 -m pip install matplotlib
 ```bash
 python3 -m pip install xlsxwriter
 ```
+
+Si quieres leer objetivos desde archivos mensuales `.xlsx`, instala tambien:
+
+```bash
+python3 -m pip install openpyxl
+```
+
+---
+
+## 8) Analisis de brecha 2025 vs Feb-2026 (nuevo)
+
+Se incluye un script adicional:
+
+- `analisis_brecha_2025_vs_feb2026.py`
+
+Este script hace exactamente el enfoque de brecha:
+
+1. Baseline = promedio diario 2025 (toda la data 2025)
+2. Comparado = promedio diario Feb-2026
+3. Gap de UEBD y Disponibilidad vs objetivo mensual
+4. Atribucion del gap a codigos por delta de horas/dia
+5. Escalamiento para que la suma de impactos por codigo cierre exactamente el gap (pp)
+6. Perdidas separadas por:
+   - Disponibilidad
+   - UEBD (por codigo)
+   - Rendimiento F09 (filtrado por `DrillPlan` contiene `F09`)
+   - Malla (manual, via parametro)
+
+### Ejecucion minima (con nombres por defecto)
+
+```bash
+python3 analisis_brecha_2025_vs_feb2026.py
+```
+
+Por defecto busca:
+
+- `DispUEBD_AllRigs_010125-0000_031225-2359` (con o sin `.csv`)
+- `DispUEBD_AllRigs_010126-0000_170226-2100` (con o sin `.csv`)
+- compara Feb-2026 (`--compare-year 2026 --compare-month 2`)
+
+### Ejecucion con objetivo mensual explicito
+
+Ejemplo (UEBD objetivo 58%, Disp objetivo 82%):
+
+```bash
+python3 analisis_brecha_2025_vs_feb2026.py --uebd-objetivo 58 --disp-objetivo 82
+```
+
+### Leer objetivo desde mensual 2026
+
+```bash
+python3 analisis_brecha_2025_vs_feb2026.py --mensual-2026 "MENSUAL 2026.xlsx" --mensual-rig "TOTAL"
+```
+
+### Agregar horas de malla (manual)
+
+```bash
+python3 analisis_brecha_2025_vs_feb2026.py --horas-perdida-malla 120
+```
+
+### Salidas del script de brecha
+
+En `salidas_brecha_2025_vs_feb2026/`:
+
+- `resumen_brecha_2025_vs_feb2026.csv`
+- `aporte_gap_uebd_por_codigo.csv`
+- `aporte_gap_disponibilidad_por_codigo.csv`
+- `perdida_rendimiento_f09_por_codigo.csv`
+- `diario_baseline_2025.csv`
+- `diario_comparado_feb2026.csv`
+- `graficos/cascada_brecha_uebd_codigos.png`
+- `graficos/cascada_brecha_disponibilidad_codigos.png`
+- `reporte_brecha_2025_vs_feb2026.xlsx`
