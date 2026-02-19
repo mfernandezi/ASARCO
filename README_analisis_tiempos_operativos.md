@@ -368,3 +368,6 @@ En `salidas_comparador_mensual/`:
 - `totales_2026_vs_original_2026.csv`
 - `totales_recalculados_2025_vs_2026.csv`
 - `reporte_mensual_comparado_sin_excluidas.xlsx`
+
+> Los encabezados de columnas en salidas CSV y Excel estan en formato descriptivo completo
+> (sin abreviaciones tecnicas como `delta_abs` o `delta_rel_pct`).

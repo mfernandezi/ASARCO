@@ -59,6 +59,28 @@ MONTH_NAME_BY_NUM = {
 DEFAULT_MENSUAL_2025 = "Planes MENSUALES 2025 (1)"
 DEFAULT_MENSUAL_2026 = "MENSUAL 2026"
 
+COLUMN_LABELS = {
+    "anio": "anio",
+    "mes_num": "numero_mes",
+    "mes": "nombre_mes",
+    "equipo": "equipo",
+    "indice_key": "indice_tecnico",
+    "indice": "indice",
+    "unidad": "unidad",
+    "valor_2025": "valor_2025",
+    "valor_2026": "valor_2026",
+    "delta_abs": "diferencia_absoluta_2026_menos_2025",
+    "delta_rel_pct": "diferencia_relativa_porcentual_2026_menos_2025",
+    "valor_total_recalculado_sin_excluidas": "valor_total_recalculado_sin_equipos_excluidos",
+    "equipos_incluidos": "cantidad_equipos_incluidos",
+    "equipos_excluidos": "cantidad_equipos_excluidos",
+    "total_original_tabla": "valor_total_original_tabla",
+    "total_recalculado_sin_excluidas": "valor_total_recalculado_sin_equipos_excluidos",
+    "diferencia_recalculado_menos_original": "diferencia_total_recalculado_menos_total_original",
+    "total_2025_sin_excluidas": "valor_total_2025_sin_equipos_excluidos",
+    "total_2026_sin_excluidas": "valor_total_2026_sin_equipos_excluidos",
+}
+
 
 def normalize_text(value: Any) -> str:
     txt = str(value or "").strip().lower()
@@ -475,12 +497,16 @@ def compare_recalculated_totals(
 
 
 def format_value(value: Any) -> str:
+    if value is None:
+        return ""
     if isinstance(value, float):
         return f"{value:.6f}"
     return str(value)
 
 
-def write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
+def write_csv(path: Path, rows: List[Dict[str, Any]], header_aliases: Optional[Dict[str, str]] = None) -> None:
+    if header_aliases is None:
+        header_aliases = COLUMN_LABELS
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
         with path.open("w", encoding="utf-8", newline="") as f:
@@ -488,10 +514,10 @@ def write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
         return
     fields = list(rows[0].keys())
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields, delimiter=";")
-        writer.writeheader()
+        writer = csv.writer(f, delimiter=";")
+        writer.writerow([header_aliases.get(col, col) for col in fields])
         for r in rows:
-            writer.writerow({k: format_value(r.get(k, "")) for k in fields})
+            writer.writerow([format_value(r.get(k, "")) for k in fields])
 
 
 def try_import_xlsxwriter():
@@ -529,7 +555,7 @@ def write_excel_report(
             return ws
         cols = list(rows[0].keys())
         for c, col in enumerate(cols):
-            ws.write(0, c, col, hfmt)
+            ws.write(0, c, COLUMN_LABELS.get(col, col), hfmt)
         for r, row in enumerate(rows, start=1):
             for c, col in enumerate(cols):
                 val = row.get(col, "")
