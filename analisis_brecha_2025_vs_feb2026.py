@@ -814,6 +814,8 @@ def sum_field(rows: Iterable[Dict[str, float]], field: str) -> float:
 
 
 def format_value(value: Any) -> str:
+    if value is None:
+        return ""
     if isinstance(value, float):
         return f"{value:.6f}"
     return str(value)
