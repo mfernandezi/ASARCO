@@ -73,6 +73,15 @@ Reglas:
 Desde la carpeta del proyecto:
 
 ```bash
+python3 analisis_tiempos_operativos.py
+```
+
+> Si no pasas argumentos, el script busca automaticamente:
+> `DispUEBD_AllRigs_010126-0000_170226-2100` (con o sin `.csv`).
+
+Tambien puedes indicar el archivo explicitamente:
+
+```bash
 python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100"
 ```
 

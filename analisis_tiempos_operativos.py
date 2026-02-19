@@ -1136,7 +1136,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "input_csv",
         type=Path,
-        help="Ruta o nombre base del archivo de entrada (acepta con o sin .csv).",
+        nargs="?",
+        default=Path("DispUEBD_AllRigs_010126-0000_170226-2100"),
+        help=(
+            "Ruta o nombre base del archivo de entrada (acepta con o sin .csv). "
+            "Si se omite, usa DispUEBD_AllRigs_010126-0000_170226-2100."
+        ),
     )
     parser.add_argument(
         "--output-dir",
