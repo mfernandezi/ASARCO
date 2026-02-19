@@ -1107,6 +1107,28 @@ def write_csv(path: Path, rows: List[Dict[str, float]], fieldnames: List[str]) -
             writer.writerow({field: format_value(row.get(field, "")) for field in fieldnames})
 
 
+def resolve_input_csv_path(input_path: Path) -> Path:
+    if input_path.exists():
+        return input_path
+
+    candidates: List[Path] = []
+    if input_path.suffix == "":
+        candidates.append(input_path.with_suffix(".csv"))
+        candidates.append(input_path.with_suffix(".CSV"))
+    elif input_path.suffix.lower() == ".csv":
+        candidates.append(input_path.with_suffix(".CSV"))
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    suggested = ", ".join(str(path) for path in candidates) if candidates else "sin sugerencias"
+    raise FileNotFoundError(
+        f"No existe el archivo de entrada: {input_path}. "
+        f"Probados automaticamente: {suggested}"
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Analiza tiempos operativos por dia/mes/anio con disponibilidad y UEBD."
@@ -1114,7 +1136,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "input_csv",
         type=Path,
-        help="Ruta al archivo CSV de entrada.",
+        help="Ruta o nombre base del archivo de entrada (acepta con o sin .csv).",
     )
     parser.add_argument(
         "--output-dir",
@@ -1170,14 +1192,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    input_csv: Path = args.input_csv
+    input_csv: Path = resolve_input_csv_path(args.input_csv)
     output_dir: Path = args.output_dir
     top_n_codigos = max(int(args.top_n_codigos), 1)
     top_dias_criticos = max(int(args.top_dias_criticos), 1)
     top_n_codigos_rig = max(int(args.top_n_codigos_rig), 1)
-
-    if not input_csv.exists():
-        raise FileNotFoundError(f"No existe el archivo de entrada: {input_csv}")
 
     daily_rows, shift_daily_rows, stats, impact_data = load_daily_metrics(
         input_csv=input_csv,

@@ -73,37 +73,39 @@ Reglas:
 Desde la carpeta del proyecto:
 
 ```bash
-python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv"
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100"
 ```
+
+> El script acepta el nombre con o sin extension `.csv`.
 
 Opcionalmente puedes definir carpeta de salida:
 
 ```bash
-python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --output-dir "salidas_analisis"
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100" --output-dir "salidas_analisis"
 ```
 
 Top de codigos para cascada (por defecto 10):
 
 ```bash
-python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --top-n-codigos 12
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100" --top-n-codigos 12
 ```
 
 Top de dias criticos (por defecto 20) y top de codigos por perforadora:
 
 ```bash
-python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --top-dias-criticos 30 --top-n-codigos-rig 8
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100" --top-dias-criticos 30 --top-n-codigos-rig 8
 ```
 
 Si quieres omitir PNG y dejar solo CSV:
 
 ```bash
-python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --sin-graficos-cascada
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100" --sin-graficos-cascada
 ```
 
 Si quieres omitir el Excel extensivo:
 
 ```bash
-python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100.csv" --sin-excel
+python3 analisis_tiempos_operativos.py "DispUEBD_AllRigs_010126-0000_170226-2100" --sin-excel
 ```
 
 ---
