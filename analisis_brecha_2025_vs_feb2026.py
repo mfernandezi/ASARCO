@@ -55,6 +55,86 @@ MONTH_NAME_BY_NUM = {
     12: "Diciembre",
 }
 
+COLUMN_LABELS = {
+    "baseline_2025_archivo": "archivo_linea_base_2025",
+    "comparado_archivo": "archivo_periodo_comparado",
+    "comparado_periodo": "periodo_comparado",
+    "dias_baseline_2025": "dias_linea_base_2025",
+    "dias_comparado": "dias_periodo_comparado",
+    "uebd_objetivo_ratio": "utilizacion_efectiva_bruta_disponibilidad_objetivo_proporcion",
+    "uebd_objetivo_pct": "utilizacion_efectiva_bruta_disponibilidad_objetivo_porcentaje",
+    "uebd_real_ratio": "utilizacion_efectiva_bruta_disponibilidad_real_proporcion",
+    "uebd_real_pct": "utilizacion_efectiva_bruta_disponibilidad_real_porcentaje",
+    "uebd_gap_pp": "brecha_utilizacion_efectiva_bruta_disponibilidad_puntos_porcentuales",
+    "disponibilidad_objetivo_ratio": "disponibilidad_objetivo_proporcion",
+    "disponibilidad_objetivo_pct": "disponibilidad_objetivo_porcentaje",
+    "disponibilidad_real_ratio": "disponibilidad_real_proporcion",
+    "disponibilidad_real_pct": "disponibilidad_real_porcentaje",
+    "disponibilidad_gap_pp": "brecha_disponibilidad_puntos_porcentuales",
+    "horas_operativas_promedio_dia_comparado": "horas_operativas_promedio_diario_periodo_comparado",
+    "horas_totales_promedio_dia_comparado": "horas_totales_promedio_diario_periodo_comparado",
+    "perdida_horas_disponibilidad": "horas_perdidas_por_disponibilidad",
+    "perdida_horas_uebd": "horas_perdidas_por_utilizacion_efectiva_bruta_disponibilidad",
+    "perdida_horas_rendimiento_f09": "horas_perdidas_por_rendimiento_fase_f09",
+    "perdida_horas_malla": "horas_perdidas_por_disminucion_tamano_malla",
+    "perdida_horas_total": "horas_perdidas_totales",
+    "fuente_objetivo_uebd": "fuente_objetivo_utilizacion_efectiva_bruta_disponibilidad",
+    "fuente_objetivo_disponibilidad": "fuente_objetivo_disponibilidad",
+    "utilizacion_objetivo_ratio": "utilizacion_objetivo_proporcion",
+    "utilizacion_objetivo_pct": "utilizacion_objetivo_porcentaje",
+    "fuente_objetivo_utilizacion": "fuente_objetivo_utilizacion",
+    "meses_con_comparacion_mensual": "cantidad_meses_con_comparacion_mensual",
+    "suma_impactos_uebd_pp": "suma_impactos_utilizacion_efectiva_bruta_disponibilidad_puntos_porcentuales",
+    "suma_impactos_disponibilidad_pp": "suma_impactos_disponibilidad_puntos_porcentuales",
+    "ranking_impacto": "ranking_impacto",
+    "codigo": "codigo_causa",
+    "baseline_horas_dia": "horas_dia_linea_base",
+    "comparado_horas_dia": "horas_dia_periodo_comparado",
+    "delta_horas_dia": "diferencia_horas_dia",
+    "delta_horas_dia_positivo": "diferencia_horas_dia_positiva",
+    "impacto_raw_pp": "impacto_bruto_puntos_porcentuales",
+    "factor_escalamiento": "factor_escalamiento",
+    "impacto_atribuido_pp": "impacto_atribuido_puntos_porcentuales",
+    "participacion_gap_pct": "participacion_en_brecha_porcentaje",
+    "impacto_acumulado_pp": "impacto_acumulado_puntos_porcentuales",
+    "perdida_horas_dia_atribuida": "horas_perdidas_dia_atribuidas",
+    "perdida_horas_mes_atribuida": "horas_perdidas_mes_atribuidas",
+    "impacto_potencial_uebd_pp": "impacto_potencial_utilizacion_efectiva_bruta_disponibilidad_puntos_porcentuales",
+    "perdida_horas_mes": "horas_perdidas_mes",
+    "fecha_operativa": "fecha_operativa",
+    "horas_totales": "horas_totales",
+    "horas_operativas": "horas_operativas",
+    "horas_efectivo": "horas_efectivas",
+    "horas_reserva": "horas_reserva",
+    "horas_mant_programada": "horas_mantencion_programada",
+    "horas_mant_no_programada": "horas_mantencion_no_programada",
+    "horas_otras": "horas_otras",
+    "uebd_ratio": "utilizacion_efectiva_bruta_disponibilidad_proporcion",
+    "uebd_pct": "utilizacion_efectiva_bruta_disponibilidad_porcentaje",
+    "disponibilidad_ratio": "disponibilidad_proporcion",
+    "disponibilidad_pct": "disponibilidad_porcentaje",
+    "anio": "anio",
+    "mes_num": "numero_mes",
+    "mes": "nombre_mes",
+    "dias_reales_con_datos": "dias_reales_con_datos",
+    "horas_totales_real": "horas_totales_reales",
+    "horas_operativas_real": "horas_operativas_reales",
+    "horas_efectivo_real": "horas_efectivas_reales",
+    "disponibilidad_obj_ratio": "disponibilidad_objetivo_proporcion",
+    "disponibilidad_obj_pct": "disponibilidad_objetivo_porcentaje",
+    "utilizacion_obj_ratio": "utilizacion_objetivo_proporcion",
+    "utilizacion_obj_pct": "utilizacion_objetivo_porcentaje",
+    "utilizacion_real_ratio": "utilizacion_real_proporcion",
+    "utilizacion_real_pct": "utilizacion_real_porcentaje",
+    "utilizacion_gap_pp": "brecha_utilizacion_puntos_porcentuales",
+    "uebd_obj_ratio": "utilizacion_efectiva_bruta_disponibilidad_objetivo_proporcion",
+    "uebd_obj_pct": "utilizacion_efectiva_bruta_disponibilidad_objetivo_porcentaje",
+    "perdida_horas_uebd_mes": "horas_perdidas_mes_por_utilizacion_efectiva_bruta_disponibilidad",
+    "perdida_horas_disponibilidad_mes": "horas_perdidas_mes_por_disponibilidad",
+    "concepto": "concepto",
+    "horas_perdidas": "horas_perdidas",
+}
+
 
 def normalize_text(value: Optional[str]) -> str:
     text = (value or "").strip().lower()
@@ -821,13 +901,21 @@ def format_value(value: Any) -> str:
     return str(value)
 
 
-def write_csv(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
+def write_csv(
+    path: Path,
+    rows: List[Dict[str, Any]],
+    fieldnames: List[str],
+    header_aliases: Optional[Dict[str, str]] = None,
+) -> None:
+    if header_aliases is None:
+        header_aliases = COLUMN_LABELS
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
-        writer.writeheader()
+        writer = csv.writer(f, delimiter=";")
+        header = [header_aliases.get(col, col) if header_aliases else col for col in fieldnames]
+        writer.writerow(header)
         for row in rows:
-            writer.writerow({k: format_value(row.get(k, "")) for k in fieldnames})
+            writer.writerow([format_value(row.get(k, "")) for k in fieldnames])
 
 
 def top_contributions(rows: List[Dict[str, float]], top_n: int) -> List[Tuple[str, float]]:
@@ -1040,7 +1128,7 @@ def write_excel(
             return ws, []
         cols = list(rows[0].keys())
         for c, col in enumerate(cols):
-            ws.write(0, c, col, header_fmt)
+            ws.write(0, c, COLUMN_LABELS.get(col, col), header_fmt)
         for r, row in enumerate(rows, start=1):
             for c, col in enumerate(cols):
                 val = row.get(col, "")
@@ -1360,7 +1448,10 @@ def main() -> int:
 
     perdidas_resumen_rows = [
         {"concepto": "Perdida por disponibilidad", "horas_perdidas": perdida_horas_disponibilidad},
-        {"concepto": "Perdida por UEBD", "horas_perdidas": perdida_horas_uebd},
+        {
+            "concepto": "Perdida por utilizacion efectiva bruta de disponibilidad",
+            "horas_perdidas": perdida_horas_uebd,
+        },
         {"concepto": "Perdida por rendimiento F09", "horas_perdidas": perdida_horas_rendimiento_f09},
         {"concepto": "Perdida por malla", "horas_perdidas": perdida_horas_malla},
     ]
