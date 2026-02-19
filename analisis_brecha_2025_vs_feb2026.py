@@ -29,6 +29,14 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from comparador_mensual_perforadoras import (
+    normalize_equipo as normalize_equipo_mensual,
+    parse_mensual_records,
+    read_table as read_mensual_a1_table,
+    recalculate_totals,
+    resolve_table_file as resolve_mensual_a1_file,
+)
+
 DEFAULT_2025_FILE = "DispUEBD_AllRigs_010125-0000_031225-2359"
 DEFAULT_2026_FILE = "DispUEBD_AllRigs_010126-0000_170226-2100"
 
@@ -426,6 +434,67 @@ def extract_monthly_targets(
     return {"uebd_ratio": uebd_ratio, "disp_ratio": disp_ratio}
 
 
+def extract_targets_from_mensual_a1(
+    mensual_a1_path: Path,
+    compare_year: int,
+    compare_month: int,
+    sheet_name: Optional[str],
+    excluded_equipos_csv: str,
+) -> Dict[str, Optional[float]]:
+    """
+    Extrae objetivos desde mensual A1 (wide format) recalculando totales sin equipos excluidos.
+    Devuelve disponibilidad y UEBD objetivo para el mes comparado.
+    """
+    resolved_path = resolve_mensual_a1_file(mensual_a1_path)
+    records = parse_mensual_records(
+        read_mensual_a1_table(resolved_path, sheet_name),
+        source_year=compare_year,
+    )
+    excluded = {
+        normalize_equipo_mensual(x)
+        for x in excluded_equipos_csv.split(",")
+        if str(x).strip()
+    }
+    rec_rows, _cmp_rows = recalculate_totals(
+        records,
+        excluded_equipo_norms=excluded,
+        source_year=compare_year,
+    )
+
+    disp_pct = None
+    util_pct = None
+    uebd_ratio_direct = None
+    for row in rec_rows:
+        if int(row.get("mes_num", 0)) != int(compare_month):
+            continue
+        idx = str(row.get("indice_key", "")).strip().lower()
+        val = to_float(row.get("valor_total_recalculado_sin_excluidas"))
+        if val is None:
+            continue
+        if idx == "disponibilidad":
+            disp_pct = val
+        elif idx == "utilizacion":
+            util_pct = val
+        elif idx == "uebd":
+            uebd_ratio_direct = parse_ratio_value(val)
+
+    disp_ratio = parse_ratio_value(disp_pct)
+    util_ratio = parse_ratio_value(util_pct)
+
+    # Si UEBD no viene como indice explicito en mensual, se aproxima como Utilizacion / Disponibilidad.
+    if uebd_ratio_direct is None and util_ratio is not None and disp_ratio is not None and disp_ratio > 0:
+        uebd_ratio = util_ratio / disp_ratio
+    else:
+        uebd_ratio = uebd_ratio_direct
+
+    return {
+        "uebd_ratio": uebd_ratio,
+        "disp_ratio": disp_ratio,
+        "util_ratio": util_ratio,
+        "source_path": str(resolved_path),
+    }
+
+
 def build_code_delta_rows(
     baseline_hpd_by_code: Dict[str, float],
     compare_hpd_by_code: Dict[str, float],
@@ -657,6 +726,25 @@ def parse_args() -> argparse.Namespace:
         help="Fila/rig a usar al leer objetivos mensuales (ej: TOTAL/FLOTA).",
     )
     parser.add_argument(
+        "--mensual-a1-2026",
+        type=Path,
+        default=None,
+        help=(
+            "Mensual 2026 en formato A1 (Equipo/Indices/Unidad/Meses), "
+            "ej: 'MENSUAL 2026' o 'MENSUAL 2026.xlsx'."
+        ),
+    )
+    parser.add_argument(
+        "--mensual-a1-sheet",
+        default=None,
+        help="Hoja del mensual A1 2026 (si aplica).",
+    )
+    parser.add_argument(
+        "--mensual-a1-exclude-equipos",
+        default="PF03,PFAR,PARR",
+        help="Equipos a excluir al recalcular totales del mensual A1.",
+    )
+    parser.add_argument(
         "--horas-perdida-malla",
         type=float,
         default=0.0,
@@ -681,6 +769,8 @@ def main() -> int:
     disp_obj = parse_ratio_value(args.disp_objetivo)
     source_uebd = "argumento"
     source_disp = "argumento"
+    source_util = ""
+    util_obj = None
 
     if args.mensual_2026 is not None:
         mensual_path = args.mensual_2026
@@ -704,6 +794,27 @@ def main() -> int:
             if disp_obj is None and extracted["disp_ratio"] is not None:
                 disp_obj = extracted["disp_ratio"]
                 source_disp = f"mensual_2026:{mensual_path.name}"
+
+    if args.mensual_a1_2026 is not None:
+        try:
+            extracted_a1 = extract_targets_from_mensual_a1(
+                mensual_a1_path=args.mensual_a1_2026,
+                compare_year=args.compare_year,
+                compare_month=args.compare_month,
+                sheet_name=args.mensual_a1_sheet,
+                excluded_equipos_csv=args.mensual_a1_exclude_equipos,
+            )
+            util_obj = extracted_a1.get("util_ratio")
+            if util_obj is not None:
+                source_util = f"mensual_a1:{Path(extracted_a1['source_path']).name}"
+            if uebd_obj is None and extracted_a1["uebd_ratio"] is not None:
+                uebd_obj = extracted_a1["uebd_ratio"]
+                source_uebd = f"mensual_a1:{Path(extracted_a1['source_path']).name}"
+            if disp_obj is None and extracted_a1["disp_ratio"] is not None:
+                disp_obj = extracted_a1["disp_ratio"]
+                source_disp = f"mensual_a1:{Path(extracted_a1['source_path']).name}"
+        except Exception as exc:
+            print(f"Advertencia: no fue posible leer mensual A1 2026 ({exc})")
 
     if uebd_obj is None:
         uebd_obj = base["uebd_ratio"]
@@ -769,6 +880,9 @@ def main() -> int:
             ),
             "fuente_objetivo_uebd": source_uebd,
             "fuente_objetivo_disponibilidad": source_disp,
+            "utilizacion_objetivo_ratio": util_obj if util_obj is not None else "",
+            "utilizacion_objetivo_pct": (util_obj * 100.0) if util_obj is not None else "",
+            "fuente_objetivo_utilizacion": source_util,
             "suma_impactos_uebd_pp": sum_field(uebd_attr_rows, "impacto_atribuido_pp"),
             "suma_impactos_disponibilidad_pp": sum_field(disp_attr_rows, "impacto_atribuido_pp"),
         }

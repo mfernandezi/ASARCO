@@ -263,9 +263,20 @@ python3 analisis_brecha_2025_vs_feb2026.py --uebd-objetivo 58 --disp-objetivo 82
 
 ### Leer objetivo desde mensual 2026
 
+Formato largo (columnas anio/mes/uebd/disponibilidad):
+
 ```bash
 python3 analisis_brecha_2025_vs_feb2026.py --mensual-2026 "MENSUAL 2026.xlsx" --mensual-rig "TOTAL"
 ```
+
+Formato A1 (Equipo/Indices/Unidad/Meses), recalculando total sin PF03/PFAR:
+
+```bash
+python3 analisis_brecha_2025_vs_feb2026.py --mensual-a1-2026 "MENSUAL 2026" --mensual-a1-exclude-equipos "PF03,PFAR"
+```
+
+> En este modo, si no existe indice UEBD en el mensual, se calcula como:
+> `UEBD = Utilizacion / Disponibilidad`.
 
 ### Agregar horas de malla (manual)
 
