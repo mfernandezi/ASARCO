@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analisis de Tiempos Operativos - ASARCO</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --primary: #1a3a5c;
+  --primary-light: #2a5a8c;
+  --accent: #e67e22;
+  --success: #27ae60;
+  --danger: #c0392b;
+  --warning: #f39c12;
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --text: #2c3e50;
+  --border: #dce1e8;
+  --shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); }
+
+header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white; padding: 20px 30px; display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+header h1 { font-size: 1.5rem; font-weight: 600; }
+header .subtitle { opacity: 0.85; font-size: 0.9rem; }
+
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+.card {
+  background: var(--card); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 24px; margin-bottom: 20px; border: 1px solid var(--border);
+}
+.card h2 { font-size: 1.15rem; color: var(--primary); margin-bottom: 16px; border-bottom: 2px solid var(--accent); padding-bottom: 8px; }
+.card h3 { font-size: 1rem; color: var(--primary-light); margin: 16px 0 10px; }
+
+.input-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 16px; }
+.input-group { display: flex; flex-direction: column; gap: 4px; }
+.input-group label { font-size: 0.82rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+.input-group input, .input-group select {
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+.input-group input:focus, .input-group select:focus { outline: none; border-color: var(--primary-light); }
+
+.file-drop {
+  border: 2px dashed var(--border); border-radius: 10px; padding: 30px; text-align: center;
+  cursor: pointer; transition: all 0.3s; background: #fafbfc;
+}
+.file-drop:hover, .file-drop.dragover { border-color: var(--accent); background: #fff8f0; }
+.file-drop .icon { font-size: 2rem; margin-bottom: 8px; }
+.file-drop p { color: #888; font-size: 0.9rem; }
+.file-drop .filename { color: var(--success); font-weight: 600; margin-top: 6px; }
+
+.btn {
+  padding: 10px 24px; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-light); }
+.btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+.btn-accent { background: var(--accent); color: white; }
+.btn-accent:hover { background: #d35400; }
+.btn-success { background: var(--success); color: white; }
+.btn-success:hover { background: #219a52; }
+.btn-sm { padding: 6px 14px; font-size: 0.85rem; }
+
+.badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+.badge-ok { background: #d4edda; color: #155724; }
+.badge-warn { background: #fff3cd; color: #856404; }
+.badge-bad { background: #f8d7da; color: #721c24; }
+.badge-info { background: #d1ecf1; color: #0c5460; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.kpi-box {
+  background: linear-gradient(135deg, #f8f9fa, #fff); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; text-align: center;
+}
+.kpi-box .kpi-label { font-size: 0.75rem; text-transform: uppercase; color: #888; letter-spacing: 0.5px; margin-bottom: 4px; }
+.kpi-box .kpi-value { font-size: 1.6rem; font-weight: 700; color: var(--primary); }
+.kpi-box .kpi-sub { font-size: 0.78rem; color: #999; margin-top: 2px; }
+.kpi-box.highlight { border-left: 4px solid var(--accent); }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+table th {
+  background: var(--primary); color: white; padding: 8px 10px; text-align: left;
+  font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.3px;
+  position: sticky; top: 0; z-index: 1;
+}
+table td { padding: 6px 10px; border-bottom: 1px solid #eee; }
+table tbody tr:hover { background: #f0f4ff; }
+table tbody tr:nth-child(even) { background: #fafbfc; }
+table tbody tr:nth-child(even):hover { background: #f0f4ff; }
+
+.table-scroll { overflow-x: auto; max-height: 500px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+.chart-container { position: relative; height: 380px; margin: 16px 0; }
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 16px; flex-wrap: wrap; }
+.tab {
+  padding: 8px 18px; cursor: pointer; border: none; background: transparent;
+  font-size: 0.88rem; font-weight: 500; color: #888; border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+}
+.tab:hover { color: var(--primary); }
+.tab.active { color: var(--primary); border-bottom-color: var(--accent); font-weight: 600; }
+
+.progress-bar { height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden; margin: 10px 0; }
+.progress-bar .fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+
+.hidden { display: none !important; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+.text-warning { color: var(--warning); }
+.mb-10 { margin-bottom: 10px; }
+.mt-10 { margin-top: 10px; }
+
+#status-msg { padding: 10px 16px; border-radius: 6px; font-size: 0.9rem; display: none; margin-bottom: 14px; }
+#status-msg.info { display: block; background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+#status-msg.success { display: block; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+#status-msg.error { display: block; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+
+.comparison-arrow { font-weight: 700; font-size: 1.1rem; }
+.comparison-arrow.up { color: var(--success); }
+.comparison-arrow.down { color: var(--danger); }
+
+.waterfall-legend { display: flex; gap: 16px; justify-content: center; margin-top: 8px; font-size: 0.82rem; }
+.waterfall-legend span { display: flex; align-items: center; gap: 4px; }
+.waterfall-legend .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Analisis de Tiempos Operativos</h1>
+    <div class="subtitle">Comparacion 2025 vs 2026 &mdash; Disponibilidad, UEBD e Impacto por Codigo</div>
+  </div>
+</header>
+
+<div class="container">
+
+<!-- STEP 1: Upload files -->
+<div class="card" id="step-upload">
+  <h2>1. Cargar Archivos CSV</h2>
+  <p class="mb-10" style="font-size:0.88rem;color:#666;">
+    Carga uno o dos archivos CSV de eventos (formato DispUEBD). Si cargas dos, el sistema compara automaticamente los periodos.
+    Si cargas uno, el analisis se hace sobre ese archivo filtrado por el rango de fechas que elijas.
+  </p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div>
+      <div class="file-drop" id="drop1">
+        <div class="icon">&#128196;</div>
+        <p><b>Archivo Base (ej. 2025)</b><br>Arrastra CSV aqui o haz clic</p>
+        <div class="filename" id="fname1"></div>
+      </div>
+      <input type="file" id="file1" accept=".csv" class="hidden">
+    </div>
+    <div>
+      <div class="file-drop" id="drop2">
+        <div class="icon">&#128196;</div>
+        <p><b>Archivo Comparado (ej. 2026)</b><br>Arrastra CSV aqui o haz clic (opcional)</p>
+        <div class="filename" id="fname2"></div>
+      </div>
+      <input type="file" id="file2" accept=".csv" class="hidden">
+    </div>
+  </div>
+</div>
+
+<!-- STEP 2: Date range & config -->
+<div class="card" id="step-config">
+  <h2>2. Configuracion del Analisis</h2>
+  <div class="input-row">
+    <div class="input-group">
+      <label>Fecha inicio Base</label>
+      <input type="date" id="date-start-base" value="2025-01-01">
+    </div>
+    <div class="input-group">
+      <label>Fecha fin Base</label>
+      <input type="date" id="date-end-base" value="2025-12-31">
+    </div>
+    <div class="input-group">
+      <label>Fecha inicio Comparado</label>
+      <input type="date" id="date-start-comp" value="2026-02-01">
+    </div>
+    <div class="input-group">
+      <label>Fecha fin Comparado</label>
+      <input type="date" id="date-end-comp" value="2026-02-28">
+    </div>
+  </div>
+  <div class="input-row">
+    <div class="input-group">
+      <label>Equipos a excluir (coma)</label>
+      <input type="text" id="exclude-rigs" value="PF03,PFAR,PARR" placeholder="PF03,PFAR" style="width:220px;">
+    </div>
+    <div class="input-group">
+      <label>Top N codigos cascada</label>
+      <input type="number" id="top-n" value="15" min="5" max="50" style="width:80px;">
+    </div>
+    <div class="input-group" style="justify-content:flex-end;">
+      <button class="btn btn-primary" id="btn-analyze" disabled>Ejecutar Analisis</button>
+    </div>
+  </div>
+  <div class="progress-bar hidden" id="progress"><div class="fill" style="width:0%"></div></div>
+  <div id="status-msg"></div>
+</div>
+
+<!-- RESULTS -->
+<div id="results" class="hidden">
+
+  <!-- Tabs -->
+  <div class="tabs" id="main-tabs">
+    <button class="tab active" data-tab="tab-resumen">Resumen</button>
+    <button class="tab" data-tab="tab-brecha">Brecha</button>
+    <button class="tab" data-tab="tab-codigos">Impacto Codigos</button>
+    <button class="tab" data-tab="tab-diario">Detalle Diario</button>
+    <button class="tab" data-tab="tab-mensual">Mensual</button>
+    <button class="tab" data-tab="tab-perforadoras">Perforadoras</button>
+    <button class="tab" data-tab="tab-charts">Graficos</button>
+  </div>
+
+  <!-- Tab: Resumen -->
+  <div class="card tab-content" id="tab-resumen">
+    <h2>Resumen Ejecutivo</h2>
+    <div id="kpi-summary" class="kpi-grid"></div>
+    <div class="chart-grid">
+      <div class="chart-container"><canvas id="chart-disp-uebd-comparison"></canvas></div>
+      <div class="chart-container"><canvas id="chart-hours-breakdown"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Tab: Brecha -->
+  <div class="card tab-content hidden" id="tab-brecha">
+    <h2>Analisis de Brecha</h2>
+    <div id="brecha-kpis" class="kpi-grid"></div>
+    <h3>Perdidas por Categoria (Horas/Dia)</h3>
+    <div class="chart-container" style="height:300px;"><canvas id="chart-losses"></canvas></div>
+    <h3>Detalle de Brecha</h3>
+    <div class="table-scroll" id="brecha-table-container"></div>
+  </div>
+
+  <!-- Tab: Codigos -->
+  <div class="card tab-content hidden" id="tab-codigos">
+    <h2>Impacto por Codigo</h2>
+    <div class="tabs mb-10" id="code-subtabs">
+      <button class="tab active" data-subtab="code-uebd">UEBD</button>
+      <button class="tab" data-subtab="code-disp">Disponibilidad</button>
+    </div>
+    <div id="code-uebd">
+      <div class="chart-container" style="height:420px;"><canvas id="chart-waterfall-uebd"></canvas></div>
+      <div class="table-scroll" id="code-uebd-table"></div>
+    </div>
+    <div id="code-disp" class="hidden">
+      <div class="chart-container" style="height:420px;"><canvas id="chart-waterfall-disp"></canvas></div>
+      <div class="table-scroll" id="code-disp-table"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Diario -->
+  <div class="card tab-content hidden" id="tab-diario">
+    <h2>Detalle Diario</h2>
+    <div class="input-row mb-10">
+      <div class="input-group">
+        <label>Filtrar Periodo</label>
+        <select id="daily-period-filter"><option value="all">Todos</option><option value="base">Base</option><option value="comp">Comparado</option></select>
+      </div>
+      <div class="input-group">
+        <label>Filtrar Perforadora</label>
+        <select id="daily-rig-filter"><option value="all">Todas</option></select>
+      </div>
+      <div class="input-group" style="justify-content:flex-end;">
+        <button class="btn btn-sm btn-success" onclick="exportCSV('daily')">Exportar CSV</button>
+      </div>
+    </div>
+    <div class="chart-container"><canvas id="chart-daily-disp"></canvas></div>
+    <div class="table-scroll" id="daily-table-container"></div>
+  </div>
+
+  <!-- Tab: Mensual -->
+  <div class="card tab-content hidden" id="tab-mensual">
+    <h2>Resumen Mensual de Flota</h2>
+    <div class="chart-grid">
+      <div class="chart-container"><canvas id="chart-monthly-disp"></canvas></div>
+      <div class="chart-container"><canvas id="chart-monthly-uebd"></canvas></div>
+    </div>
+    <div class="table-scroll" id="monthly-table-container"></div>
+    <div class="input-row mt-10" style="justify-content:flex-end;">
+      <button class="btn btn-sm btn-success" onclick="exportCSV('monthly')">Exportar CSV</button>
+    </div>
+  </div>
+
+  <!-- Tab: Perforadoras -->
+  <div class="card tab-content hidden" id="tab-perforadoras">
+    <h2>Resumen por Perforadora</h2>
+    <div class="chart-container"><canvas id="chart-rig-comparison"></canvas></div>
+    <div class="table-scroll" id="rig-table-container"></div>
+    <div class="input-row mt-10" style="justify-content:flex-end;">
+      <button class="btn btn-sm btn-success" onclick="exportCSV('rigs')">Exportar CSV</button>
+    </div>
+  </div>
+
+  <!-- Tab: Charts -->
+  <div class="card tab-content hidden" id="tab-charts">
+    <h2>Graficos Adicionales</h2>
+    <div class="chart-grid">
+      <div class="chart-container"><canvas id="chart-trend-disp"></canvas></div>
+      <div class="chart-container"><canvas id="chart-trend-uebd"></canvas></div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-container"><canvas id="chart-horas-pie-base"></canvas></div>
+      <div class="chart-container"><canvas id="chart-horas-pie-comp"></canvas></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ===== GLOBALS =====
+let fileData1 = null, fileData2 = null;
+let parsedBase = null, parsedComp = null;
+let analysisResult = null;
+const charts = {};
+
+// ===== FILE HANDLING =====
+function setupFileDrop(dropId, fileId, fnameId, idx) {
+  const drop = document.getElementById(dropId);
+  const input = document.getElementById(fileId);
+  const fname = document.getElementById(fnameId);
+
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0], idx, fname);
+  });
+  input.addEventListener('change', () => { if (input.files.length) handleFile(input.files[0], idx, fname); });
+}
+
+function handleFile(file, idx, fnameEl) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    if (idx === 1) fileData1 = e.target.result;
+    else fileData2 = e.target.result;
+    fnameEl.textContent = file.name;
+    document.getElementById('btn-analyze').disabled = !fileData1;
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+setupFileDrop('drop1', 'file1', 'fname1', 1);
+setupFileDrop('drop2', 'file2', 'fname2', 2);
+
+// ===== CSV PARSER =====
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return [];
+  // detect delimiter
+  const delim = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
+  const headers = lines[0].replace(/^\uFEFF/, '').split(delim).map(h => h.trim());
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = lines[i].split(delim);
+    const row = {};
+    headers.forEach((h, j) => { row[h] = (vals[j] || '').trim(); });
+    rows.push(row);
+  }
+  return rows;
+}
+
+// ===== UTILITY FUNCTIONS (matching Python logic) =====
+function normalizeText(val) {
+  return (val || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizeEquipo(val) {
+  return normalizeText(val).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function toFloat(val) {
+  if (val == null) return null;
+  const s = String(val).trim().replace('%', '').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function parseDateTime(val) {
+  if (!val) return null;
+  const s = val.trim();
+  const d = new Date(s.replace(' ', 'T'));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function getOperationalDay(row, startDt) {
+  const wds = row['WorkDayStarted'];
+  if (wds && wds.trim()) {
+    const parts = wds.trim().split('-');
+    if (parts.length === 3) return wds.trim();
+  }
+  if (!startDt) return null;
+  const adjusted = new Date(startDt.getTime() - 21 * 3600000);
+  return adjusted.toISOString().slice(0, 10);
+}
+
+function classifyBucket(row) {
+  const sc = normalizeText(row['ShortCode']);
+  const planned = normalizeText(row['PlannedCodeName']);
+  const ocn = normalizeText(row['OnlyCodeName']);
+  if (sc === 'efectivo' || ocn.startsWith('efectivo_')) return 'efectivo';
+  if (sc === 'reserva') return 'reserva';
+  if (sc === 'mantencion') return planned === 'programada' ? 'mant_programada' : 'mant_no_programada';
+  return 'otras';
+}
+
+function buildCodeLabel(row) {
+  const num = (row['OnlyCodeNumber'] || '').trim();
+  const name = (row['OnlyCodeName'] || '').trim();
+  const alt = (row['CodeName'] || '').trim();
+  const delay = (row['DelayData'] || '').trim();
+  if (num && name) return num + '_' + name;
+  if (name) return name;
+  if (alt) return alt;
+  if (delay) return delay;
+  return 'SIN_CODIGO';
+}
+
+function dateInRange(dateStr, start, end) {
+  return dateStr >= start && dateStr <= end;
+}
+
+// ===== CORE ANALYSIS =====
+function aggregateData(rows, dateStart, dateEnd, excludeNorms) {
+  const dailyMetrics = {};     // dateStr -> rigNorm -> metrics
+  const fleetDaily = {};       // dateStr -> fleet metrics
+  const codeUEBD = {};         // code -> hours
+  const codeDisp = {};         // code -> hours
+  const codeF09 = {};          // code -> hours
+  const rigSummary = {};       // rigNorm -> { label, totals }
+  let totalRows = 0, skipped = 0;
+
+  for (const row of rows) {
+    const startDt = parseDateTime(row['Time']);
+    const opDay = getOperationalDay(row, startDt);
+    if (!opDay) { skipped++; continue; }
+    if (!dateInRange(opDay, dateStart, dateEnd)) { skipped++; continue; }
+
+    let durSec = toFloat(row['Duration']);
+    if (durSec == null) {
+      const endDt = parseDateTime(row['EndTime']);
+      if (startDt && endDt) durSec = (endDt - startDt) / 1000;
+      else durSec = 0;
+    }
+    const durH = Math.max(durSec, 0) / 3600;
+    if (durH <= 0) continue;
+    totalRows++;
+
+    const rigRaw = (row['RigName'] || 'SIN_RIG').trim();
+    const rigNorm = normalizeEquipo(rigRaw);
+    const bucket = classifyBucket(row);
+    const code = buildCodeLabel(row);
+    const drillPlan = normalizeText(row['DrillPlan']);
+    const isF09 = drillPlan.includes('f09');
+    const isExcluded = excludeNorms.has(rigNorm);
+
+    // Per rig per day
+    if (!dailyMetrics[opDay]) dailyMetrics[opDay] = {};
+    if (!dailyMetrics[opDay][rigNorm]) {
+      dailyMetrics[opDay][rigNorm] = { label: rigRaw, ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0 };
+    }
+    const m = dailyMetrics[opDay][rigNorm];
+    m.ht += durH;
+    if (bucket === 'efectivo') m.he += durH;
+    else if (bucket === 'reserva') m.hr += durH;
+    else if (bucket === 'mant_programada') m.hmp += durH;
+    else if (bucket === 'mant_no_programada') m.hmnp += durH;
+    else m.ho += durH;
+
+    // Fleet daily (excluding excluded rigs)
+    if (!isExcluded) {
+      if (!fleetDaily[opDay]) fleetDaily[opDay] = { ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0 };
+      const f = fleetDaily[opDay];
+      f.ht += durH;
+      if (bucket === 'efectivo') f.he += durH;
+      else if (bucket === 'reserva') f.hr += durH;
+      else if (bucket === 'mant_programada') f.hmp += durH;
+      else if (bucket === 'mant_no_programada') f.hmnp += durH;
+      else f.ho += durH;
+
+      // Code impact
+      if (bucket === 'mant_programada' || bucket === 'mant_no_programada') {
+        codeDisp[code] = (codeDisp[code] || 0) + durH;
+      } else if (bucket !== 'efectivo') {
+        codeUEBD[code] = (codeUEBD[code] || 0) + durH;
+        if (isF09) codeF09[code] = (codeF09[code] || 0) + durH;
+      }
+    }
+
+    // Rig summary
+    if (!rigSummary[rigNorm]) rigSummary[rigNorm] = { label: rigRaw, ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0, days: new Set() };
+    const rs = rigSummary[rigNorm];
+    rs.ht += durH; rs.he += durH * (bucket === 'efectivo' ? 1 : 0);
+    rs.hr += durH * (bucket === 'reserva' ? 1 : 0);
+    rs.hmp += durH * (bucket === 'mant_programada' ? 1 : 0);
+    rs.hmnp += durH * (bucket === 'mant_no_programada' ? 1 : 0);
+    rs.ho += durH * (bucket === 'otras' ? 1 : 0);
+    rs.days.add(opDay);
+  }
+
+  // Compute fleet totals
+  const days = Object.keys(fleetDaily).sort();
+  const dayCount = days.length;
+  const totals = { ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0 };
+  for (const d of days) {
+    for (const k of Object.keys(totals)) totals[k] += fleetDaily[d][k];
+  }
+
+  const hop = totals.ht - totals.hmp - totals.hmnp;
+  const dispRatio = totals.ht > 0 ? hop / totals.ht : 0;
+  const uebdRatio = hop > 0 ? totals.he / hop : 0;
+
+  // Average code hours per day
+  const avgCodeH = (codeMap) => {
+    const result = {};
+    for (const [c, h] of Object.entries(codeMap)) result[c] = dayCount > 0 ? h / dayCount : 0;
+    return result;
+  };
+
+  // Daily fleet rows for charts
+  const dailyFleetRows = days.map(d => {
+    const f = fleetDaily[d];
+    const hopD = f.ht - f.hmp - f.hmnp;
+    return {
+      fecha: d,
+      ht: f.ht, he: f.he, hr: f.hr, hmp: f.hmp, hmnp: f.hmnp, ho: f.ho,
+      hop: Math.max(hopD, 0),
+      disp: f.ht > 0 ? Math.max(hopD, 0) / f.ht * 100 : 0,
+      uebd: hopD > 0 ? f.he / Math.max(hopD, 0) * 100 : 0
+    };
+  });
+
+  // Monthly aggregation
+  const monthlyMap = {};
+  for (const dr of dailyFleetRows) {
+    const ym = dr.fecha.slice(0, 7);
+    if (!monthlyMap[ym]) monthlyMap[ym] = { ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0, days: 0 };
+    const mm = monthlyMap[ym];
+    mm.ht += dr.ht; mm.he += dr.he; mm.hr += dr.hr; mm.hmp += dr.hmp; mm.hmnp += dr.hmnp; mm.ho += dr.ho; mm.days++;
+  }
+  const monthlyRows = Object.entries(monthlyMap).sort((a, b) => a[0].localeCompare(b[0])).map(([ym, mm]) => {
+    const hopM = mm.ht - mm.hmp - mm.hmnp;
+    return {
+      mes: ym, dias: mm.days, ht: mm.ht, he: mm.he, hr: mm.hr, hmp: mm.hmp, hmnp: mm.hmnp, ho: mm.ho,
+      hop: Math.max(hopM, 0),
+      disp: mm.ht > 0 ? Math.max(hopM, 0) / mm.ht * 100 : 0,
+      uebd: hopM > 0 ? mm.he / Math.max(hopM, 0) * 100 : 0
+    };
+  });
+
+  // Rig rows
+  const rigRows = Object.entries(rigSummary)
+    .filter(([norm]) => !excludeNorms.has(norm))
+    .map(([norm, rs]) => {
+      const hopR = rs.ht - rs.hmp - rs.hmnp;
+      return {
+        equipo: rs.label, norm, dias: rs.days.size, ht: rs.ht, he: rs.he, hr: rs.hr, hmp: rs.hmp, hmnp: rs.hmnp, ho: rs.ho,
+        hop: Math.max(hopR, 0),
+        disp: rs.ht > 0 ? Math.max(hopR, 0) / rs.ht * 100 : 0,
+        uebd: hopR > 0 ? rs.he / Math.max(hopR, 0) * 100 : 0
+      };
+    })
+    .sort((a, b) => a.equipo.localeCompare(b.equipo));
+
+  return {
+    totalRows, skipped, dayCount, totals, hop: Math.max(hop, 0), dispRatio, uebdRatio,
+    dailyFleetRows, monthlyRows, rigRows,
+    codeUEBD, codeDisp, codeF09,
+    avgCodeUEBD: avgCodeH(codeUEBD),
+    avgCodeDisp: avgCodeH(codeDisp),
+    avgCodeF09: avgCodeH(codeF09),
+    allRigNorms: Object.keys(rigSummary),
+    rigSummary,
+    dailyMetrics
+  };
+}
+
+function computeCodeImpact(baseData, compData, metric) {
+  // metric: 'uebd' or 'disp'
+  const baseCodes = metric === 'uebd' ? baseData.avgCodeUEBD : baseData.avgCodeDisp;
+  const compCodes = metric === 'uebd' ? compData.avgCodeUEBD : compData.avgCodeDisp;
+
+  const baseRatio = metric === 'uebd' ? baseData.uebdRatio : baseData.dispRatio;
+  const compRatio = metric === 'uebd' ? compData.uebdRatio : compData.dispRatio;
+  const gapPP = (compRatio - baseRatio) * 100;
+
+  const denominator = metric === 'uebd' ? (compData.hop / Math.max(compData.dayCount, 1))
+    : (compData.totals.ht / Math.max(compData.dayCount, 1));
+
+  const allCodes = new Set([...Object.keys(baseCodes), ...Object.keys(compCodes)]);
+  let impactRows = [];
+  let totalRawImpact = 0;
+
+  for (const code of allCodes) {
+    const bH = baseCodes[code] || 0;
+    const cH = compCodes[code] || 0;
+    const deltaH = cH - bH;
+    const rawImpactPP = denominator > 0 ? (deltaH / denominator) * (metric === 'uebd' ? -100 : -100) : 0;
+    totalRawImpact += rawImpactPP;
+    impactRows.push({
+      code, baseH: bH, compH: cH, deltaH, rawImpactPP
+    });
+  }
+
+  // Scale to match gap
+  const scaleFactor = totalRawImpact !== 0 ? gapPP / totalRawImpact : 1;
+  let cumulative = 0;
+  impactRows = impactRows.map(r => {
+    const attrPP = r.rawImpactPP * scaleFactor;
+    cumulative += attrPP;
+    return {
+      ...r, scaleFactor, attrPP,
+      cumPP: cumulative,
+      sharePct: gapPP !== 0 ? (attrPP / gapPP) * 100 : 0,
+      lostHoursDay: denominator > 0 ? Math.abs(attrPP / 100 * denominator) : 0
+    };
+  });
+
+  // Sort by absolute impact (most negative first for UEBD)
+  impactRows.sort((a, b) => a.attrPP - b.attrPP);
+
+  return { gapPP, baseRatio, compRatio, denominator, impactRows, scaleFactor };
+}
+
+function computeBrechaAnalysis(baseData, compData) {
+  const dispGapPP = (compData.dispRatio - baseData.dispRatio) * 100;
+  const uebdGapPP = (compData.uebdRatio - baseData.uebdRatio) * 100;
+
+  const avgHTcomp = compData.totals.ht / Math.max(compData.dayCount, 1);
+  const avgHopComp = compData.hop / Math.max(compData.dayCount, 1);
+
+  const lostDisp = Math.abs(dispGapPP / 100) * avgHTcomp;
+  const lostUEBD = Math.abs(uebdGapPP / 100) * avgHopComp;
+
+  const totalF09 = Object.values(compData.avgCodeF09).reduce((s, v) => s + v, 0);
+  const baseF09 = Object.values(baseData.avgCodeF09).reduce((s, v) => s + v, 0);
+  const lostRendF09 = Math.abs(totalF09 - baseF09);
+
+  return {
+    dispGapPP, uebdGapPP,
+    baseDisp: baseData.dispRatio * 100, compDisp: compData.dispRatio * 100,
+    baseUEBD: baseData.uebdRatio * 100, compUEBD: compData.uebdRatio * 100,
+    lostDisp, lostUEBD, lostRendF09,
+    lostTotal: lostDisp + lostUEBD + lostRendF09,
+    baseDays: baseData.dayCount, compDays: compData.dayCount,
+    avgHTcomp, avgHopComp
+  };
+}
+
+// ===== MAIN ANALYSIS =====
+function runAnalysis() {
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = true;
+  const progress = document.getElementById('progress');
+  const fill = progress.querySelector('.fill');
+  progress.classList.remove('hidden');
+  setStatus('info', 'Procesando datos...');
+  fill.style.width = '10%';
+
+  setTimeout(() => {
+    try {
+      const dateStartBase = document.getElementById('date-start-base').value;
+      const dateEndBase = document.getElementById('date-end-base').value;
+      const dateStartComp = document.getElementById('date-start-comp').value;
+      const dateEndComp = document.getElementById('date-end-comp').value;
+      const excludeStr = document.getElementById('exclude-rigs').value;
+      const topN = parseInt(document.getElementById('top-n').value) || 15;
+      const excludeNorms = new Set(excludeStr.split(',').map(s => normalizeEquipo(s.trim())).filter(Boolean));
+
+      fill.style.width = '20%';
+
+      // Parse CSV
+      const rows1 = parseCSV(fileData1);
+      fill.style.width = '40%';
+
+      let rows2 = null;
+      if (fileData2) {
+        rows2 = parseCSV(fileData2);
+      }
+      fill.style.width = '50%';
+
+      // If only one file, use it for both periods (different date ranges)
+      const baseRows = rows1;
+      const compRows = rows2 || rows1;
+
+      // Aggregate
+      const baseData = aggregateData(baseRows, dateStartBase, dateEndBase, excludeNorms);
+      fill.style.width = '65%';
+      const compData = aggregateData(compRows, dateStartComp, dateEndComp, excludeNorms);
+      fill.style.width = '80%';
+
+      // Brecha
+      const brecha = computeBrechaAnalysis(baseData, compData);
+
+      // Code impact
+      const codeImpactUEBD = computeCodeImpact(baseData, compData, 'uebd');
+      const codeImpactDisp = computeCodeImpact(baseData, compData, 'disp');
+
+      fill.style.width = '95%';
+
+      analysisResult = { baseData, compData, brecha, codeImpactUEBD, codeImpactDisp, topN, excludeNorms, dateStartBase, dateEndBase, dateStartComp, dateEndComp };
+
+      renderResults();
+
+      fill.style.width = '100%';
+      setStatus('success', `Analisis completado. Base: ${baseData.dayCount} dias (${baseData.totalRows} eventos). Comparado: ${compData.dayCount} dias (${compData.totalRows} eventos).`);
+      document.getElementById('results').classList.remove('hidden');
+
+    } catch (err) {
+      setStatus('error', 'Error: ' + err.message);
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => progress.classList.add('hidden'), 2000);
+    }
+  }, 100);
+}
+
+document.getElementById('btn-analyze').addEventListener('click', runAnalysis);
+
+function setStatus(type, msg) {
+  const el = document.getElementById('status-msg');
+  el.className = type;
+  el.textContent = msg;
+}
+
+// ===== RENDERING =====
+function renderResults() {
+  const { baseData, compData, brecha, codeImpactUEBD, codeImpactDisp, topN } = analysisResult;
+
+  renderKPIs();
+  renderBrechaTab();
+  renderCodeImpactTab(codeImpactUEBD, codeImpactDisp, topN);
+  renderDailyTab();
+  renderMonthlyTab();
+  renderRigTab();
+  renderChartsTab();
+
+  // Populate rig filter
+  const rigFilter = document.getElementById('daily-rig-filter');
+  rigFilter.innerHTML = '<option value="all">Todas (flota)</option>';
+  const allRigs = new Set();
+  for (const d of Object.values(baseData.dailyMetrics)) for (const rn of Object.keys(d)) allRigs.add(rn);
+  for (const d of Object.values(compData.dailyMetrics)) for (const rn of Object.keys(d)) allRigs.add(rn);
+  for (const rn of [...allRigs].sort()) {
+    const label = baseData.rigSummary[rn]?.label || compData.rigSummary[rn]?.label || rn;
+    rigFilter.innerHTML += `<option value="${rn}">${label}</option>`;
+  }
+}
+
+function renderKPIs() {
+  const { brecha, baseData, compData } = analysisResult;
+  const html = `
+    <div class="kpi-box highlight"><div class="kpi-label">Disponibilidad Base</div><div class="kpi-value">${brecha.baseDisp.toFixed(2)}%</div><div class="kpi-sub">${baseData.dayCount} dias</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Disponibilidad Comparado</div><div class="kpi-value ${brecha.dispGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.compDisp.toFixed(2)}%</div><div class="kpi-sub">${compData.dayCount} dias</div></div>
+    <div class="kpi-box"><div class="kpi-label">Brecha Disp</div><div class="kpi-value ${brecha.dispGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.dispGapPP >= 0 ? '+' : ''}${brecha.dispGapPP.toFixed(2)} pp</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">UEBD Base</div><div class="kpi-value">${brecha.baseUEBD.toFixed(2)}%</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">UEBD Comparado</div><div class="kpi-value ${brecha.uebdGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.compUEBD.toFixed(2)}%</div></div>
+    <div class="kpi-box"><div class="kpi-label">Brecha UEBD</div><div class="kpi-value ${brecha.uebdGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.uebdGapPP >= 0 ? '+' : ''}${brecha.uebdGapPP.toFixed(2)} pp</div></div>
+    <div class="kpi-box"><div class="kpi-label">Hrs Efectivas/Dia Base</div><div class="kpi-value">${(baseData.totals.he / Math.max(baseData.dayCount, 1)).toFixed(1)}</div></div>
+    <div class="kpi-box"><div class="kpi-label">Hrs Efectivas/Dia Comp</div><div class="kpi-value">${(compData.totals.he / Math.max(compData.dayCount, 1)).toFixed(1)}</div></div>
+  `;
+  document.getElementById('kpi-summary').innerHTML = html;
+
+  // Chart: Disp & UEBD comparison
+  renderBarComparison('chart-disp-uebd-comparison', 'Disponibilidad y UEBD (%)',
+    ['Disponibilidad', 'UEBD'],
+    [brecha.baseDisp, brecha.baseUEBD],
+    [brecha.compDisp, brecha.compUEBD]);
+
+  // Chart: Hours breakdown
+  renderStackedBreakdown('chart-hours-breakdown', baseData, compData);
+}
+
+function renderBrechaTab() {
+  const { brecha } = analysisResult;
+  const html = `
+    <div class="kpi-box"><div class="kpi-label">Perdida Disponibilidad</div><div class="kpi-value text-danger">${brecha.lostDisp.toFixed(1)} h/dia</div></div>
+    <div class="kpi-box"><div class="kpi-label">Perdida UEBD</div><div class="kpi-value text-danger">${brecha.lostUEBD.toFixed(1)} h/dia</div></div>
+    <div class="kpi-box"><div class="kpi-label">Perdida Rend. F09</div><div class="kpi-value text-warning">${brecha.lostRendF09.toFixed(1)} h/dia</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Perdida Total</div><div class="kpi-value text-danger">${brecha.lostTotal.toFixed(1)} h/dia</div></div>
+  `;
+  document.getElementById('brecha-kpis').innerHTML = html;
+
+  // Losses chart
+  destroyChart('chart-losses');
+  const ctx = document.getElementById('chart-losses').getContext('2d');
+  charts['chart-losses'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Disponibilidad', 'UEBD', 'Rendimiento F09', 'Total'],
+      datasets: [{
+        label: 'Horas perdidas/dia',
+        data: [brecha.lostDisp, brecha.lostUEBD, brecha.lostRendF09, brecha.lostTotal],
+        backgroundColor: ['#e74c3c', '#e67e22', '#f1c40f', '#8e44ad']
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { title: { display: true, text: 'Horas/dia' } } } }
+  });
+
+  // Brecha detail table
+  const rows = [
+    { concepto: 'Disponibilidad Base (%)', valor: brecha.baseDisp.toFixed(2) },
+    { concepto: 'Disponibilidad Comparado (%)', valor: brecha.compDisp.toFixed(2) },
+    { concepto: 'Brecha Disponibilidad (pp)', valor: brecha.dispGapPP.toFixed(2) },
+    { concepto: 'UEBD Base (%)', valor: brecha.baseUEBD.toFixed(2) },
+    { concepto: 'UEBD Comparado (%)', valor: brecha.compUEBD.toFixed(2) },
+    { concepto: 'Brecha UEBD (pp)', valor: brecha.uebdGapPP.toFixed(2) },
+    { concepto: 'Dias Base', valor: brecha.baseDays },
+    { concepto: 'Dias Comparado', valor: brecha.compDays },
+    { concepto: 'Promedio Hrs Totales/dia Comp', valor: brecha.avgHTcomp.toFixed(1) },
+    { concepto: 'Promedio Hrs Operativas/dia Comp', valor: brecha.avgHopComp.toFixed(1) },
+    { concepto: 'Perdida Disponibilidad (h/dia)', valor: brecha.lostDisp.toFixed(2) },
+    { concepto: 'Perdida UEBD (h/dia)', valor: brecha.lostUEBD.toFixed(2) },
+    { concepto: 'Perdida Rendimiento F09 (h/dia)', valor: brecha.lostRendF09.toFixed(2) },
+    { concepto: 'Perdida Total (h/dia)', valor: brecha.lostTotal.toFixed(2) },
+  ];
+  document.getElementById('brecha-table-container').innerHTML = buildTable(['Concepto', 'Valor'], rows.map(r => [r.concepto, r.valor]));
+}
+
+function renderCodeImpactTab(impactUEBD, impactDisp, topN) {
+  // UEBD waterfall
+  const topUEBD = impactUEBD.impactRows.slice(0, topN);
+  renderWaterfallChart('chart-waterfall-uebd', `Top ${topN} Codigos - Impacto UEBD (pp)`, topUEBD);
+  renderImpactTable('code-uebd-table', impactUEBD, 'UEBD');
+
+  // Disp waterfall
+  const topDisp = impactDisp.impactRows.slice(0, topN);
+  renderWaterfallChart('chart-waterfall-disp', `Top ${topN} Codigos - Impacto Disponibilidad (pp)`, topDisp);
+  renderImpactTable('code-disp-table', impactDisp, 'Disponibilidad');
+}
+
+function renderImpactTable(containerId, impact, label) {
+  const headers = ['#', 'Codigo', 'Hrs/dia Base', 'Hrs/dia Comp', 'Delta h/dia', 'Impacto (pp)', 'Acumulado (pp)', '% Brecha'];
+  const rows = impact.impactRows.map((r, i) => [
+    i + 1, r.code, r.baseH.toFixed(3), r.compH.toFixed(3), r.deltaH.toFixed(3),
+    colorVal(r.attrPP, 2), r.cumPP.toFixed(2), r.sharePct.toFixed(1) + '%'
+  ]);
+  const headerRow = `<div style="margin-bottom:8px;font-size:0.88rem;"><b>Brecha ${label}:</b> ${impact.gapPP.toFixed(2)} pp | Base: ${(impact.baseRatio * 100).toFixed(2)}% | Comp: ${(impact.compRatio * 100).toFixed(2)}% | Factor escala: ${impact.scaleFactor.toFixed(4)}</div>`;
+  document.getElementById(containerId).innerHTML = headerRow + buildTable(headers, rows);
+}
+
+function renderDailyTab() {
+  updateDailyTable();
+  document.getElementById('daily-period-filter').onchange = updateDailyTable;
+  document.getElementById('daily-rig-filter').onchange = updateDailyTable;
+}
+
+function updateDailyTable() {
+  const { baseData, compData } = analysisResult;
+  const period = document.getElementById('daily-period-filter').value;
+  const rig = document.getElementById('daily-rig-filter').value;
+
+  let rows = [];
+  if (period === 'all' || period === 'base') {
+    for (const dr of baseData.dailyFleetRows) rows.push({ ...dr, periodo: 'Base' });
+  }
+  if (period === 'all' || period === 'comp') {
+    for (const dr of compData.dailyFleetRows) rows.push({ ...dr, periodo: 'Comp' });
+  }
+
+  // If specific rig, recalculate from dailyMetrics
+  if (rig !== 'all') {
+    rows = [];
+    const addRigDaily = (data, label) => {
+      for (const [dateStr, rigs] of Object.entries(data.dailyMetrics)) {
+        if (rigs[rig]) {
+          const m = rigs[rig];
+          const hopD = m.ht - m.hmp - m.hmnp;
+          rows.push({
+            fecha: dateStr, periodo: label,
+            ht: m.ht, he: m.he, hr: m.hr, hmp: m.hmp, hmnp: m.hmnp, ho: m.ho,
+            hop: Math.max(hopD, 0),
+            disp: m.ht > 0 ? Math.max(hopD, 0) / m.ht * 100 : 0,
+            uebd: hopD > 0 ? m.he / Math.max(hopD, 0) * 100 : 0
+          });
+        }
+      }
+    };
+    if (period === 'all' || period === 'base') addRigDaily(baseData, 'Base');
+    if (period === 'all' || period === 'comp') addRigDaily(compData, 'Comp');
+  }
+
+  rows.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  // Chart
+  const labels = rows.map(r => r.fecha);
+  const dispVals = rows.map(r => r.disp);
+  const uebdVals = rows.map(r => r.uebd);
+
+  destroyChart('chart-daily-disp');
+  const ctx = document.getElementById('chart-daily-disp').getContext('2d');
+  charts['chart-daily-disp'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Disponibilidad %', data: dispVals, borderColor: '#2980b9', backgroundColor: 'rgba(41,128,185,0.1)', fill: true, tension: 0.3, pointRadius: 1 },
+        { label: 'UEBD %', data: uebdVals, borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 1 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } },
+      scales: { y: { min: 0, max: 100, title: { display: true, text: '%' } } } }
+  });
+
+  // Table
+  const headers = ['Fecha', 'Periodo', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Reserva', 'Otras', 'Disp %', 'UEBD %'];
+  const tableRows = rows.map(r => [
+    r.fecha, r.periodo, r.ht.toFixed(1), r.he.toFixed(1), r.hop.toFixed(1),
+    r.hmp.toFixed(1), r.hmnp.toFixed(1), r.hr.toFixed(1), r.ho.toFixed(1),
+    colorVal2(r.disp, 80), colorVal2(r.uebd, 60)
+  ]);
+  document.getElementById('daily-table-container').innerHTML = buildTable(headers, tableRows);
+
+  // Store for export
+  analysisResult._dailyExport = rows;
+}
+
+function renderMonthlyTab() {
+  const { baseData, compData } = analysisResult;
+  const allMonthly = [
+    ...baseData.monthlyRows.map(r => ({ ...r, periodo: 'Base' })),
+    ...compData.monthlyRows.map(r => ({ ...r, periodo: 'Comp' }))
+  ].sort((a, b) => a.mes.localeCompare(b.mes));
+
+  // Charts
+  const labels = allMonthly.map(r => r.mes + ' (' + r.periodo + ')');
+
+  destroyChart('chart-monthly-disp');
+  const ctx1 = document.getElementById('chart-monthly-disp').getContext('2d');
+  charts['chart-monthly-disp'] = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Disponibilidad %', data: allMonthly.map(r => r.disp),
+        backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#3498db' : '#e74c3c')
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Disponibilidad Mensual (%)' } },
+      scales: { y: { min: 0 } } }
+  });
+
+  destroyChart('chart-monthly-uebd');
+  const ctx2 = document.getElementById('chart-monthly-uebd').getContext('2d');
+  charts['chart-monthly-uebd'] = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'UEBD %', data: allMonthly.map(r => r.uebd),
+        backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#2ecc71' : '#e67e22')
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'UEBD Mensual (%)' } },
+      scales: { y: { min: 0 } } }
+  });
+
+  // Table
+  const headers = ['Mes', 'Periodo', 'Dias', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Disp %', 'UEBD %'];
+  const tableRows = allMonthly.map(r => [
+    r.mes, r.periodo, r.dias, r.ht.toFixed(0), r.he.toFixed(0), r.hop.toFixed(0),
+    r.hmp.toFixed(0), r.hmnp.toFixed(0), r.disp.toFixed(2), r.uebd.toFixed(2)
+  ]);
+  document.getElementById('monthly-table-container').innerHTML = buildTable(headers, tableRows);
+  analysisResult._monthlyExport = allMonthly;
+}
+
+function renderRigTab() {
+  const { baseData, compData } = analysisResult;
+  const allRigs = [...baseData.rigRows.map(r => ({ ...r, periodo: 'Base' })),
+    ...compData.rigRows.map(r => ({ ...r, periodo: 'Comp' }))];
+
+  // Chart comparing rigs
+  const baseRigs = baseData.rigRows;
+  const compRigs = compData.rigRows;
+  const rigLabels = [...new Set([...baseRigs.map(r => r.equipo), ...compRigs.map(r => r.equipo)])].sort();
+
+  destroyChart('chart-rig-comparison');
+  const ctx = document.getElementById('chart-rig-comparison').getContext('2d');
+  charts['chart-rig-comparison'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rigLabels,
+      datasets: [
+        { label: 'Disp Base %', data: rigLabels.map(l => { const r = baseRigs.find(x => x.equipo === l); return r ? r.disp : 0; }), backgroundColor: '#3498db' },
+        { label: 'Disp Comp %', data: rigLabels.map(l => { const r = compRigs.find(x => x.equipo === l); return r ? r.disp : 0; }), backgroundColor: '#e74c3c' },
+        { label: 'UEBD Base %', data: rigLabels.map(l => { const r = baseRigs.find(x => x.equipo === l); return r ? r.uebd : 0; }), backgroundColor: '#2ecc71' },
+        { label: 'UEBD Comp %', data: rigLabels.map(l => { const r = compRigs.find(x => x.equipo === l); return r ? r.uebd : 0; }), backgroundColor: '#e67e22' },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } },
+      scales: { y: { min: 0, max: 100 } } }
+  });
+
+  // Table
+  const headers = ['Equipo', 'Periodo', 'Dias', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Disp %', 'UEBD %'];
+  const tableRows = allRigs.sort((a, b) => a.equipo.localeCompare(b.equipo) || a.periodo.localeCompare(b.periodo))
+    .map(r => [r.equipo, r.periodo, r.dias, r.ht.toFixed(0), r.he.toFixed(0), r.hop.toFixed(0),
+      r.hmp.toFixed(0), r.hmnp.toFixed(0), colorVal2(r.disp, 80), colorVal2(r.uebd, 60)]);
+  document.getElementById('rig-table-container').innerHTML = buildTable(headers, tableRows);
+  analysisResult._rigExport = allRigs;
+}
+
+function renderChartsTab() {
+  const { baseData, compData } = analysisResult;
+
+  // Trend Disponibilidad
+  destroyChart('chart-trend-disp');
+  const ctx1 = document.getElementById('chart-trend-disp').getContext('2d');
+  charts['chart-trend-disp'] = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels: [...baseData.dailyFleetRows.map(r => r.fecha), ...compData.dailyFleetRows.map(r => r.fecha)],
+      datasets: [{
+        label: 'Disponibilidad %',
+        data: [...baseData.dailyFleetRows.map(r => r.disp), ...compData.dailyFleetRows.map(r => r.disp)],
+        borderColor: '#2980b9', fill: false, tension: 0.2, pointRadius: 0.5
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { title: { display: true, text: 'Tendencia Disponibilidad - Ambos Periodos' } },
+      scales: { y: { min: 0, max: 100 } } }
+  });
+
+  // Trend UEBD
+  destroyChart('chart-trend-uebd');
+  const ctx2 = document.getElementById('chart-trend-uebd').getContext('2d');
+  charts['chart-trend-uebd'] = new Chart(ctx2, {
+    type: 'line',
+    data: {
+      labels: [...baseData.dailyFleetRows.map(r => r.fecha), ...compData.dailyFleetRows.map(r => r.fecha)],
+      datasets: [{
+        label: 'UEBD %',
+        data: [...baseData.dailyFleetRows.map(r => r.uebd), ...compData.dailyFleetRows.map(r => r.uebd)],
+        borderColor: '#e67e22', fill: false, tension: 0.2, pointRadius: 0.5
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { title: { display: true, text: 'Tendencia UEBD - Ambos Periodos' } },
+      scales: { y: { min: 0, max: 100 } } }
+  });
+
+  // Pie charts: hours breakdown
+  const pieFn = (canvasId, title, data) => {
+    destroyChart(canvasId);
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    charts[canvasId] = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Efectivo', 'Reserva', 'Mant. Programada', 'Mant. No Prog.', 'Otras'],
+        datasets: [{
+          data: [data.he, data.hr, data.hmp, data.hmnp, data.ho],
+          backgroundColor: ['#27ae60', '#3498db', '#e74c3c', '#e67e22', '#95a5a6']
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { title: { display: true, text: title }, legend: { position: 'bottom' } } }
+    });
+  };
+  pieFn('chart-horas-pie-base', 'Distribucion Horas - Base', baseData.totals);
+  pieFn('chart-horas-pie-comp', 'Distribucion Horas - Comparado', compData.totals);
+}
+
+// ===== CHART HELPERS =====
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function renderBarComparison(canvasId, title, labels, baseVals, compVals) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Base', data: baseVals, backgroundColor: '#3498db' },
+        { label: 'Comparado', data: compVals, backgroundColor: '#e74c3c' }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { title: { display: true, text: title } },
+      scales: { y: { min: 0, max: 100, title: { display: true, text: '%' } } } }
+  });
+}
+
+function renderStackedBreakdown(canvasId, baseData, compData) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  const bd = baseData.dayCount > 0 ? baseData.dayCount : 1;
+  const cd = compData.dayCount > 0 ? compData.dayCount : 1;
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Base (h/dia)', 'Comparado (h/dia)'],
+      datasets: [
+        { label: 'Efectivo', data: [baseData.totals.he / bd, compData.totals.he / cd], backgroundColor: '#27ae60' },
+        { label: 'Reserva', data: [baseData.totals.hr / bd, compData.totals.hr / cd], backgroundColor: '#3498db' },
+        { label: 'Mant. Prog.', data: [baseData.totals.hmp / bd, compData.totals.hmp / cd], backgroundColor: '#e74c3c' },
+        { label: 'Mant. No Prog.', data: [baseData.totals.hmnp / bd, compData.totals.hmnp / cd], backgroundColor: '#e67e22' },
+        { label: 'Otras', data: [baseData.totals.ho / bd, compData.totals.ho / cd], backgroundColor: '#95a5a6' },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { title: { display: true, text: 'Desglose Horas Promedio/Dia' } },
+      scales: { x: { stacked: true }, y: { stacked: true, title: { display: true, text: 'Horas/dia' } } } }
+  });
+}
+
+function renderWaterfallChart(canvasId, title, impactRows) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  const labels = impactRows.map(r => r.code.length > 25 ? r.code.slice(0, 22) + '...' : r.code);
+  const values = impactRows.map(r => r.attrPP);
+  const colors = values.map(v => v < 0 ? '#e74c3c' : '#27ae60');
+
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Impacto (pp)',
+        data: values,
+        backgroundColor: colors,
+        borderColor: colors.map(c => c === '#e74c3c' ? '#c0392b' : '#219a52'),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { title: { display: true, text: title }, legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'Puntos Porcentuales' } },
+        y: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ===== TABLE HELPERS =====
+function buildTable(headers, rows) {
+  let html = '<table><thead><tr>';
+  for (const h of headers) html += `<th>${h}</th>`;
+  html += '</tr></thead><tbody>';
+  for (const row of rows) {
+    html += '<tr>';
+    for (const cell of row) html += `<td>${cell}</td>`;
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+function colorVal(v, decimals) {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  const cls = n < 0 ? 'text-danger' : n > 0 ? 'text-success' : '';
+  return `<span class="${cls}">${n.toFixed(decimals)}</span>`;
+}
+
+function colorVal2(v, threshold) {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  const cls = n >= threshold ? 'text-success' : 'text-danger';
+  return `<span class="${cls}">${n.toFixed(2)}</span>`;
+}
+
+// ===== TAB NAVIGATION =====
+document.getElementById('main-tabs').addEventListener('click', e => {
+  if (!e.target.classList.contains('tab')) return;
+  document.querySelectorAll('#main-tabs .tab').forEach(t => t.classList.remove('active'));
+  e.target.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+  document.getElementById(e.target.dataset.tab).classList.remove('hidden');
+});
+
+document.getElementById('code-subtabs').addEventListener('click', e => {
+  if (!e.target.classList.contains('tab')) return;
+  document.querySelectorAll('#code-subtabs .tab').forEach(t => t.classList.remove('active'));
+  e.target.classList.add('active');
+  const show = e.target.dataset.subtab;
+  document.getElementById('code-uebd').classList.toggle('hidden', show !== 'code-uebd');
+  document.getElementById('code-disp').classList.toggle('hidden', show !== 'code-disp');
+});
+
+// ===== CSV EXPORT =====
+function exportCSV(type) {
+  if (!analysisResult) return;
+  let csvContent = '';
+  let filename = '';
+
+  if (type === 'daily') {
+    const rows = analysisResult._dailyExport || [];
+    csvContent = 'fecha;periodo;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;reserva;otras;disponibilidad_pct;uebd_pct\n';
+    for (const r of rows) {
+      csvContent += `${r.fecha};${r.periodo};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.hr.toFixed(2)};${r.ho.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
+    }
+    filename = 'detalle_diario.csv';
+  } else if (type === 'monthly') {
+    const rows = analysisResult._monthlyExport || [];
+    csvContent = 'mes;periodo;dias;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;disponibilidad_pct;uebd_pct\n';
+    for (const r of rows) {
+      csvContent += `${r.mes};${r.periodo};${r.dias};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
+    }
+    filename = 'resumen_mensual.csv';
+  } else if (type === 'rigs') {
+    const rows = analysisResult._rigExport || [];
+    csvContent = 'equipo;periodo;dias;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;disponibilidad_pct;uebd_pct\n';
+    for (const r of rows) {
+      csvContent += `${r.equipo};${r.periodo};${r.dias};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
+    }
+    filename = 'resumen_perforadoras.csv';
+  }
+
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
+</script>
+</body>
+</html>
