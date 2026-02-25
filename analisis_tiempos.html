@@ -50,12 +50,23 @@ header .subtitle { opacity: 0.85; font-size: 0.9rem; }
 
 .file-drop {
   border: 2px dashed var(--border); border-radius: 10px; padding: 30px; text-align: center;
-  cursor: pointer; transition: all 0.3s; background: #fafbfc;
+  cursor: pointer; transition: all 0.3s; background: #fafbfc; max-width: 500px;
 }
 .file-drop:hover, .file-drop.dragover { border-color: var(--accent); background: #fff8f0; }
 .file-drop .icon { font-size: 2rem; margin-bottom: 8px; }
 .file-drop p { color: #888; font-size: 0.9rem; }
 .file-drop .filename { color: var(--success); font-weight: 600; margin-top: 6px; }
+
+.file-info { margin-top: 12px; padding: 12px 16px; background: #f0f7ff; border-radius: 8px; border: 1px solid #bee5eb; font-size: 0.88rem; }
+.file-info b { color: var(--primary); }
+
+.range-box {
+  border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: #fafbfc;
+  flex: 1; min-width: 280px;
+}
+.range-box h4 { font-size: 0.9rem; color: var(--primary); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.range-box.base { border-left: 4px solid #3498db; }
+.range-box.comp { border-left: 4px solid #e74c3c; }
 
 .btn {
   padding: 10px 24px; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600;
@@ -128,14 +139,6 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
 #status-msg.info { display: block; background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
 #status-msg.success { display: block; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
 #status-msg.error { display: block; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-
-.comparison-arrow { font-weight: 700; font-size: 1.1rem; }
-.comparison-arrow.up { color: var(--success); }
-.comparison-arrow.down { color: var(--danger); }
-
-.waterfall-legend { display: flex; gap: 16px; justify-content: center; margin-top: 8px; font-size: 0.82rem; }
-.waterfall-legend span { display: flex; align-items: center; gap: 4px; }
-.waterfall-legend .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 </style>
 </head>
 <body>
@@ -143,58 +146,64 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
 <header>
   <div>
     <h1>Analisis de Tiempos Operativos</h1>
-    <div class="subtitle">Comparacion 2025 vs 2026 &mdash; Disponibilidad, UEBD e Impacto por Codigo</div>
+    <div class="subtitle">Carga un CSV, define los rangos de fecha y compara periodos</div>
   </div>
 </header>
 
 <div class="container">
 
-<!-- STEP 1: Upload files -->
+<!-- STEP 1: Upload single file -->
 <div class="card" id="step-upload">
-  <h2>1. Cargar Archivos CSV</h2>
+  <h2>1. Cargar Archivo CSV</h2>
   <p class="mb-10" style="font-size:0.88rem;color:#666;">
-    Carga uno o dos archivos CSV de eventos (formato DispUEBD). Si cargas dos, el sistema compara automaticamente los periodos.
-    Si cargas uno, el analisis se hace sobre ese archivo filtrado por el rango de fechas que elijas.
+    Sube el archivo CSV de eventos (formato DispUEBD, separador <code>;</code>).
+    Desde este unico archivo se filtraran los dos periodos que definas abajo.
   </p>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-    <div>
-      <div class="file-drop" id="drop1">
-        <div class="icon">&#128196;</div>
-        <p><b>Archivo Base (ej. 2025)</b><br>Arrastra CSV aqui o haz clic</p>
-        <div class="filename" id="fname1"></div>
-      </div>
-      <input type="file" id="file1" accept=".csv" class="hidden">
-    </div>
-    <div>
-      <div class="file-drop" id="drop2">
-        <div class="icon">&#128196;</div>
-        <p><b>Archivo Comparado (ej. 2026)</b><br>Arrastra CSV aqui o haz clic (opcional)</p>
-        <div class="filename" id="fname2"></div>
-      </div>
-      <input type="file" id="file2" accept=".csv" class="hidden">
-    </div>
+  <div class="file-drop" id="drop1">
+    <div class="icon">&#128196;</div>
+    <p><b>Archivo CSV de eventos</b><br>Arrastra aqui o haz clic para seleccionar</p>
+    <div class="filename" id="fname1"></div>
+  </div>
+  <input type="file" id="file1" accept=".csv" class="hidden">
+  <div class="file-info hidden" id="file-info">
+    Cargando...
   </div>
 </div>
 
-<!-- STEP 2: Date range & config -->
+<!-- STEP 2: Date ranges -->
 <div class="card" id="step-config">
-  <h2>2. Configuracion del Analisis</h2>
+  <h2>2. Definir Rangos de Tiempo</h2>
+  <p class="mb-10" style="font-size:0.88rem;color:#666;">
+    El archivo se filtra en dos periodos: <b style="color:#3498db">Base</b> (linea base, ej. todo 2025)
+    y <b style="color:#e74c3c">Comparado</b> (el periodo a evaluar, ej. febrero 2026).
+    Los datos fuera de estos rangos se ignoran.
+  </p>
   <div class="input-row">
-    <div class="input-group">
-      <label>Fecha inicio Base</label>
-      <input type="date" id="date-start-base" value="2025-01-01">
+    <div class="range-box base">
+      <h4>Periodo Base (linea base)</h4>
+      <div class="input-row" style="margin-bottom:0">
+        <div class="input-group">
+          <label>Fecha inicio</label>
+          <input type="date" id="date-start-base" value="2025-01-01">
+        </div>
+        <div class="input-group">
+          <label>Fecha fin</label>
+          <input type="date" id="date-end-base" value="2025-12-31">
+        </div>
+      </div>
     </div>
-    <div class="input-group">
-      <label>Fecha fin Base</label>
-      <input type="date" id="date-end-base" value="2025-12-31">
-    </div>
-    <div class="input-group">
-      <label>Fecha inicio Comparado</label>
-      <input type="date" id="date-start-comp" value="2026-02-01">
-    </div>
-    <div class="input-group">
-      <label>Fecha fin Comparado</label>
-      <input type="date" id="date-end-comp" value="2026-02-28">
+    <div class="range-box comp">
+      <h4>Periodo Comparado (a evaluar)</h4>
+      <div class="input-row" style="margin-bottom:0">
+        <div class="input-group">
+          <label>Fecha inicio</label>
+          <input type="date" id="date-start-comp" value="2026-02-01">
+        </div>
+        <div class="input-group">
+          <label>Fecha fin</label>
+          <input type="date" id="date-end-comp" value="2026-02-28">
+        </div>
+      </div>
     </div>
   </div>
   <div class="input-row">
@@ -217,7 +226,6 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
 <!-- RESULTS -->
 <div id="results" class="hidden">
 
-  <!-- Tabs -->
   <div class="tabs" id="main-tabs">
     <button class="tab active" data-tab="tab-resumen">Resumen</button>
     <button class="tab" data-tab="tab-brecha">Brecha</button>
@@ -275,7 +283,7 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
       </div>
       <div class="input-group">
         <label>Filtrar Perforadora</label>
-        <select id="daily-rig-filter"><option value="all">Todas</option></select>
+        <select id="daily-rig-filter"><option value="all">Todas (flota)</option></select>
       </div>
       <div class="input-group" style="justify-content:flex-end;">
         <button class="btn btn-sm btn-success" onclick="exportCSV('daily')">Exportar CSV</button>
@@ -326,46 +334,76 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
 
 <script>
 // ===== GLOBALS =====
-let fileData1 = null, fileData2 = null;
-let parsedBase = null, parsedComp = null;
+let rawFileData = null;
+let allRows = null;
 let analysisResult = null;
 const charts = {};
 
-// ===== FILE HANDLING =====
-function setupFileDrop(dropId, fileId, fnameId, idx) {
-  const drop = document.getElementById(dropId);
-  const input = document.getElementById(fileId);
-  const fname = document.getElementById(fnameId);
+// ===== FILE HANDLING (single file) =====
+(function setupFileDrop() {
+  const drop = document.getElementById('drop1');
+  const input = document.getElementById('file1');
+  const fname = document.getElementById('fname1');
 
   drop.addEventListener('click', () => input.click());
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
   drop.addEventListener('drop', e => {
     e.preventDefault(); drop.classList.remove('dragover');
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0], idx, fname);
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
   });
-  input.addEventListener('change', () => { if (input.files.length) handleFile(input.files[0], idx, fname); });
-}
+  input.addEventListener('change', () => { if (input.files.length) handleFile(input.files[0]); });
 
-function handleFile(file, idx, fnameEl) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    if (idx === 1) fileData1 = e.target.result;
-    else fileData2 = e.target.result;
-    fnameEl.textContent = file.name;
-    document.getElementById('btn-analyze').disabled = !fileData1;
-  };
-  reader.readAsText(file, 'utf-8');
-}
+  function handleFile(file) {
+    fname.textContent = file.name;
+    setStatus('info', 'Leyendo archivo...');
+    const reader = new FileReader();
+    reader.onload = e => {
+      rawFileData = e.target.result;
+      allRows = parseCSV(rawFileData);
+      document.getElementById('btn-analyze').disabled = false;
 
-setupFileDrop('drop1', 'file1', 'fname1', 1);
-setupFileDrop('drop2', 'file2', 'fname2', 2);
+      // Detect date range in file
+      let minDate = null, maxDate = null;
+      for (const row of allRows) {
+        const opDay = getOperationalDay(row, parseDateTime(row['Time']));
+        if (!opDay) continue;
+        if (!minDate || opDay < minDate) minDate = opDay;
+        if (!maxDate || opDay > maxDate) maxDate = opDay;
+      }
+
+      const info = document.getElementById('file-info');
+      info.classList.remove('hidden');
+      info.innerHTML = `<b>${allRows.length.toLocaleString()}</b> filas leidas` +
+        (minDate ? ` &mdash; Rango de fechas en archivo: <b>${minDate}</b> a <b>${maxDate}</b>` : '') +
+        `<br><span style="font-size:0.82rem;color:#666;">Ahora define los rangos Base y Comparado abajo y presiona "Ejecutar Analisis".</span>`;
+
+      // Auto-suggest dates if detectable
+      if (minDate && maxDate) {
+        const minY = parseInt(minDate.slice(0, 4));
+        const maxY = parseInt(maxDate.slice(0, 4));
+        if (minY < maxY) {
+          // multi-year: base = first year, comp = last year's last month
+          document.getElementById('date-start-base').value = minDate;
+          document.getElementById('date-end-base').value = minY + '-12-31';
+          // comp = start of max year month
+          const maxM = parseInt(maxDate.slice(5, 7));
+          const compStart = maxY + '-' + String(maxM).padStart(2, '0') + '-01';
+          document.getElementById('date-start-comp').value = compStart;
+          document.getElementById('date-end-comp').value = maxDate;
+        }
+      }
+
+      setStatus('success', 'Archivo cargado correctamente. Configura los rangos y ejecuta el analisis.');
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+})();
 
 // ===== CSV PARSER =====
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (!lines.length) return [];
-  // detect delimiter
   const delim = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
   const headers = lines[0].replace(/^\uFEFF/, '').split(delim).map(h => h.trim());
   const rows = [];
@@ -440,12 +478,12 @@ function dateInRange(dateStr, start, end) {
 
 // ===== CORE ANALYSIS =====
 function aggregateData(rows, dateStart, dateEnd, excludeNorms) {
-  const dailyMetrics = {};     // dateStr -> rigNorm -> metrics
-  const fleetDaily = {};       // dateStr -> fleet metrics
-  const codeUEBD = {};         // code -> hours
-  const codeDisp = {};         // code -> hours
-  const codeF09 = {};          // code -> hours
-  const rigSummary = {};       // rigNorm -> { label, totals }
+  const dailyMetrics = {};
+  const fleetDaily = {};
+  const codeUEBD = {};
+  const codeDisp = {};
+  const codeF09 = {};
+  const rigSummary = {};
   let totalRows = 0, skipped = 0;
 
   for (const row of rows) {
@@ -508,15 +546,16 @@ function aggregateData(rows, dateStart, dateEnd, excludeNorms) {
     // Rig summary
     if (!rigSummary[rigNorm]) rigSummary[rigNorm] = { label: rigRaw, ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0, days: new Set() };
     const rs = rigSummary[rigNorm];
-    rs.ht += durH; rs.he += durH * (bucket === 'efectivo' ? 1 : 0);
-    rs.hr += durH * (bucket === 'reserva' ? 1 : 0);
-    rs.hmp += durH * (bucket === 'mant_programada' ? 1 : 0);
-    rs.hmnp += durH * (bucket === 'mant_no_programada' ? 1 : 0);
-    rs.ho += durH * (bucket === 'otras' ? 1 : 0);
+    rs.ht += durH;
+    if (bucket === 'efectivo') rs.he += durH;
+    else if (bucket === 'reserva') rs.hr += durH;
+    else if (bucket === 'mant_programada') rs.hmp += durH;
+    else if (bucket === 'mant_no_programada') rs.hmnp += durH;
+    else rs.ho += durH;
     rs.days.add(opDay);
   }
 
-  // Compute fleet totals
+  // Fleet totals
   const days = Object.keys(fleetDaily).sort();
   const dayCount = days.length;
   const totals = { ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0 };
@@ -528,27 +567,25 @@ function aggregateData(rows, dateStart, dateEnd, excludeNorms) {
   const dispRatio = totals.ht > 0 ? hop / totals.ht : 0;
   const uebdRatio = hop > 0 ? totals.he / hop : 0;
 
-  // Average code hours per day
   const avgCodeH = (codeMap) => {
     const result = {};
     for (const [c, h] of Object.entries(codeMap)) result[c] = dayCount > 0 ? h / dayCount : 0;
     return result;
   };
 
-  // Daily fleet rows for charts
+  // Daily fleet rows
   const dailyFleetRows = days.map(d => {
     const f = fleetDaily[d];
     const hopD = f.ht - f.hmp - f.hmnp;
     return {
-      fecha: d,
-      ht: f.ht, he: f.he, hr: f.hr, hmp: f.hmp, hmnp: f.hmnp, ho: f.ho,
+      fecha: d, ht: f.ht, he: f.he, hr: f.hr, hmp: f.hmp, hmnp: f.hmnp, ho: f.ho,
       hop: Math.max(hopD, 0),
       disp: f.ht > 0 ? Math.max(hopD, 0) / f.ht * 100 : 0,
       uebd: hopD > 0 ? f.he / Math.max(hopD, 0) * 100 : 0
     };
   });
 
-  // Monthly aggregation
+  // Monthly
   const monthlyMap = {};
   for (const dr of dailyFleetRows) {
     const ym = dr.fecha.slice(0, 7);
@@ -587,14 +624,11 @@ function aggregateData(rows, dateStart, dateEnd, excludeNorms) {
     avgCodeUEBD: avgCodeH(codeUEBD),
     avgCodeDisp: avgCodeH(codeDisp),
     avgCodeF09: avgCodeH(codeF09),
-    allRigNorms: Object.keys(rigSummary),
-    rigSummary,
-    dailyMetrics
+    rigSummary, dailyMetrics
   };
 }
 
 function computeCodeImpact(baseData, compData, metric) {
-  // metric: 'uebd' or 'disp'
   const baseCodes = metric === 'uebd' ? baseData.avgCodeUEBD : baseData.avgCodeDisp;
   const compCodes = metric === 'uebd' ? compData.avgCodeUEBD : compData.avgCodeDisp;
 
@@ -602,7 +636,8 @@ function computeCodeImpact(baseData, compData, metric) {
   const compRatio = metric === 'uebd' ? compData.uebdRatio : compData.dispRatio;
   const gapPP = (compRatio - baseRatio) * 100;
 
-  const denominator = metric === 'uebd' ? (compData.hop / Math.max(compData.dayCount, 1))
+  const denominator = metric === 'uebd'
+    ? (compData.hop / Math.max(compData.dayCount, 1))
     : (compData.totals.ht / Math.max(compData.dayCount, 1));
 
   const allCodes = new Set([...Object.keys(baseCodes), ...Object.keys(compCodes)]);
@@ -613,30 +648,24 @@ function computeCodeImpact(baseData, compData, metric) {
     const bH = baseCodes[code] || 0;
     const cH = compCodes[code] || 0;
     const deltaH = cH - bH;
-    const rawImpactPP = denominator > 0 ? (deltaH / denominator) * (metric === 'uebd' ? -100 : -100) : 0;
+    const rawImpactPP = denominator > 0 ? (deltaH / denominator) * -100 : 0;
     totalRawImpact += rawImpactPP;
-    impactRows.push({
-      code, baseH: bH, compH: cH, deltaH, rawImpactPP
-    });
+    impactRows.push({ code, baseH: bH, compH: cH, deltaH, rawImpactPP });
   }
 
-  // Scale to match gap
   const scaleFactor = totalRawImpact !== 0 ? gapPP / totalRawImpact : 1;
   let cumulative = 0;
   impactRows = impactRows.map(r => {
     const attrPP = r.rawImpactPP * scaleFactor;
     cumulative += attrPP;
     return {
-      ...r, scaleFactor, attrPP,
-      cumPP: cumulative,
+      ...r, scaleFactor, attrPP, cumPP: cumulative,
       sharePct: gapPP !== 0 ? (attrPP / gapPP) * 100 : 0,
       lostHoursDay: denominator > 0 ? Math.abs(attrPP / 100 * denominator) : 0
     };
   });
 
-  // Sort by absolute impact (most negative first for UEBD)
   impactRows.sort((a, b) => a.attrPP - b.attrPP);
-
   return { gapPP, baseRatio, compRatio, denominator, impactRows, scaleFactor };
 }
 
@@ -650,9 +679,9 @@ function computeBrechaAnalysis(baseData, compData) {
   const lostDisp = Math.abs(dispGapPP / 100) * avgHTcomp;
   const lostUEBD = Math.abs(uebdGapPP / 100) * avgHopComp;
 
-  const totalF09 = Object.values(compData.avgCodeF09).reduce((s, v) => s + v, 0);
-  const baseF09 = Object.values(baseData.avgCodeF09).reduce((s, v) => s + v, 0);
-  const lostRendF09 = Math.abs(totalF09 - baseF09);
+  const totalF09Comp = Object.values(compData.avgCodeF09).reduce((s, v) => s + v, 0);
+  const totalF09Base = Object.values(baseData.avgCodeF09).reduce((s, v) => s + v, 0);
+  const lostRendF09 = Math.abs(totalF09Comp - totalF09Base);
 
   return {
     dispGapPP, uebdGapPP,
@@ -685,50 +714,46 @@ function runAnalysis() {
       const topN = parseInt(document.getElementById('top-n').value) || 15;
       const excludeNorms = new Set(excludeStr.split(',').map(s => normalizeEquipo(s.trim())).filter(Boolean));
 
+      if (!dateStartBase || !dateEndBase || !dateStartComp || !dateEndComp) {
+        throw new Error('Debes completar las 4 fechas de los rangos.');
+      }
+      if (dateStartBase > dateEndBase) throw new Error('Fecha inicio Base debe ser anterior a fecha fin Base.');
+      if (dateStartComp > dateEndComp) throw new Error('Fecha inicio Comparado debe ser anterior a fecha fin Comparado.');
+
       fill.style.width = '20%';
 
-      // Parse CSV
-      const rows1 = parseCSV(fileData1);
-      fill.style.width = '40%';
-
-      let rows2 = null;
-      if (fileData2) {
-        rows2 = parseCSV(fileData2);
-      }
-      fill.style.width = '50%';
-
-      // If only one file, use it for both periods (different date ranges)
-      const baseRows = rows1;
-      const compRows = rows2 || rows1;
-
-      // Aggregate
-      const baseData = aggregateData(baseRows, dateStartBase, dateEndBase, excludeNorms);
-      fill.style.width = '65%';
-      const compData = aggregateData(compRows, dateStartComp, dateEndComp, excludeNorms);
+      // Same file, different date ranges
+      const baseData = aggregateData(allRows, dateStartBase, dateEndBase, excludeNorms);
+      fill.style.width = '55%';
+      const compData = aggregateData(allRows, dateStartComp, dateEndComp, excludeNorms);
       fill.style.width = '80%';
 
-      // Brecha
-      const brecha = computeBrechaAnalysis(baseData, compData);
+      if (baseData.dayCount === 0) throw new Error(`No se encontraron datos en el periodo Base (${dateStartBase} a ${dateEndBase}). Verifica las fechas.`);
+      if (compData.dayCount === 0) throw new Error(`No se encontraron datos en el periodo Comparado (${dateStartComp} a ${dateEndComp}). Verifica las fechas.`);
 
-      // Code impact
+      const brecha = computeBrechaAnalysis(baseData, compData);
       const codeImpactUEBD = computeCodeImpact(baseData, compData, 'uebd');
       const codeImpactDisp = computeCodeImpact(baseData, compData, 'disp');
 
       fill.style.width = '95%';
 
-      analysisResult = { baseData, compData, brecha, codeImpactUEBD, codeImpactDisp, topN, excludeNorms, dateStartBase, dateEndBase, dateStartComp, dateEndComp };
+      analysisResult = {
+        baseData, compData, brecha, codeImpactUEBD, codeImpactDisp, topN, excludeNorms,
+        dateStartBase, dateEndBase, dateStartComp, dateEndComp
+      };
 
       renderResults();
-
       fill.style.width = '100%';
-      setStatus('success', `Analisis completado. Base: ${baseData.dayCount} dias (${baseData.totalRows} eventos). Comparado: ${compData.dayCount} dias (${compData.totalRows} eventos).`);
+      setStatus('success',
+        `Analisis completado. Base: ${baseData.dayCount} dias (${baseData.totalRows.toLocaleString()} eventos, ${dateStartBase} a ${dateEndBase}). ` +
+        `Comparado: ${compData.dayCount} dias (${compData.totalRows.toLocaleString()} eventos, ${dateStartComp} a ${dateEndComp}).`);
       document.getElementById('results').classList.remove('hidden');
 
     } catch (err) {
       setStatus('error', 'Error: ' + err.message);
       console.error(err);
     } finally {
-      btn.disabled = false;
+      btn.disabled = !allRows;
       setTimeout(() => progress.classList.add('hidden'), 2000);
     }
   }, 100);
@@ -767,85 +792,71 @@ function renderResults() {
 }
 
 function renderKPIs() {
-  const { brecha, baseData, compData } = analysisResult;
+  const { brecha, baseData, compData, dateStartBase, dateEndBase, dateStartComp, dateEndComp } = analysisResult;
   const html = `
-    <div class="kpi-box highlight"><div class="kpi-label">Disponibilidad Base</div><div class="kpi-value">${brecha.baseDisp.toFixed(2)}%</div><div class="kpi-sub">${baseData.dayCount} dias</div></div>
-    <div class="kpi-box highlight"><div class="kpi-label">Disponibilidad Comparado</div><div class="kpi-value ${brecha.dispGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.compDisp.toFixed(2)}%</div><div class="kpi-sub">${compData.dayCount} dias</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Disp. Base</div><div class="kpi-value">${brecha.baseDisp.toFixed(2)}%</div><div class="kpi-sub">${baseData.dayCount} dias (${dateStartBase} a ${dateEndBase})</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Disp. Comparado</div><div class="kpi-value ${brecha.dispGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.compDisp.toFixed(2)}%</div><div class="kpi-sub">${compData.dayCount} dias (${dateStartComp} a ${dateEndComp})</div></div>
     <div class="kpi-box"><div class="kpi-label">Brecha Disp</div><div class="kpi-value ${brecha.dispGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.dispGapPP >= 0 ? '+' : ''}${brecha.dispGapPP.toFixed(2)} pp</div></div>
     <div class="kpi-box highlight"><div class="kpi-label">UEBD Base</div><div class="kpi-value">${brecha.baseUEBD.toFixed(2)}%</div></div>
     <div class="kpi-box highlight"><div class="kpi-label">UEBD Comparado</div><div class="kpi-value ${brecha.uebdGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.compUEBD.toFixed(2)}%</div></div>
     <div class="kpi-box"><div class="kpi-label">Brecha UEBD</div><div class="kpi-value ${brecha.uebdGapPP >= 0 ? 'text-success' : 'text-danger'}">${brecha.uebdGapPP >= 0 ? '+' : ''}${brecha.uebdGapPP.toFixed(2)} pp</div></div>
-    <div class="kpi-box"><div class="kpi-label">Hrs Efectivas/Dia Base</div><div class="kpi-value">${(baseData.totals.he / Math.max(baseData.dayCount, 1)).toFixed(1)}</div></div>
-    <div class="kpi-box"><div class="kpi-label">Hrs Efectivas/Dia Comp</div><div class="kpi-value">${(compData.totals.he / Math.max(compData.dayCount, 1)).toFixed(1)}</div></div>
+    <div class="kpi-box"><div class="kpi-label">Hrs Efect/Dia Base</div><div class="kpi-value">${(baseData.totals.he / Math.max(baseData.dayCount, 1)).toFixed(1)}</div></div>
+    <div class="kpi-box"><div class="kpi-label">Hrs Efect/Dia Comp</div><div class="kpi-value">${(compData.totals.he / Math.max(compData.dayCount, 1)).toFixed(1)}</div></div>
   `;
   document.getElementById('kpi-summary').innerHTML = html;
 
-  // Chart: Disp & UEBD comparison
   renderBarComparison('chart-disp-uebd-comparison', 'Disponibilidad y UEBD (%)',
     ['Disponibilidad', 'UEBD'],
     [brecha.baseDisp, brecha.baseUEBD],
     [brecha.compDisp, brecha.compUEBD]);
 
-  // Chart: Hours breakdown
   renderStackedBreakdown('chart-hours-breakdown', baseData, compData);
 }
 
 function renderBrechaTab() {
   const { brecha } = analysisResult;
-  const html = `
+  document.getElementById('brecha-kpis').innerHTML = `
     <div class="kpi-box"><div class="kpi-label">Perdida Disponibilidad</div><div class="kpi-value text-danger">${brecha.lostDisp.toFixed(1)} h/dia</div></div>
     <div class="kpi-box"><div class="kpi-label">Perdida UEBD</div><div class="kpi-value text-danger">${brecha.lostUEBD.toFixed(1)} h/dia</div></div>
     <div class="kpi-box"><div class="kpi-label">Perdida Rend. F09</div><div class="kpi-value text-warning">${brecha.lostRendF09.toFixed(1)} h/dia</div></div>
     <div class="kpi-box highlight"><div class="kpi-label">Perdida Total</div><div class="kpi-value text-danger">${brecha.lostTotal.toFixed(1)} h/dia</div></div>
   `;
-  document.getElementById('brecha-kpis').innerHTML = html;
 
-  // Losses chart
   destroyChart('chart-losses');
-  const ctx = document.getElementById('chart-losses').getContext('2d');
-  charts['chart-losses'] = new Chart(ctx, {
+  charts['chart-losses'] = new Chart(document.getElementById('chart-losses').getContext('2d'), {
     type: 'bar',
     data: {
       labels: ['Disponibilidad', 'UEBD', 'Rendimiento F09', 'Total'],
-      datasets: [{
-        label: 'Horas perdidas/dia',
-        data: [brecha.lostDisp, brecha.lostUEBD, brecha.lostRendF09, brecha.lostTotal],
-        backgroundColor: ['#e74c3c', '#e67e22', '#f1c40f', '#8e44ad']
-      }]
+      datasets: [{ label: 'Horas perdidas/dia', data: [brecha.lostDisp, brecha.lostUEBD, brecha.lostRendF09, brecha.lostTotal],
+        backgroundColor: ['#e74c3c', '#e67e22', '#f1c40f', '#8e44ad'] }]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
       scales: { y: { title: { display: true, text: 'Horas/dia' } } } }
   });
 
-  // Brecha detail table
   const rows = [
-    { concepto: 'Disponibilidad Base (%)', valor: brecha.baseDisp.toFixed(2) },
-    { concepto: 'Disponibilidad Comparado (%)', valor: brecha.compDisp.toFixed(2) },
-    { concepto: 'Brecha Disponibilidad (pp)', valor: brecha.dispGapPP.toFixed(2) },
-    { concepto: 'UEBD Base (%)', valor: brecha.baseUEBD.toFixed(2) },
-    { concepto: 'UEBD Comparado (%)', valor: brecha.compUEBD.toFixed(2) },
-    { concepto: 'Brecha UEBD (pp)', valor: brecha.uebdGapPP.toFixed(2) },
-    { concepto: 'Dias Base', valor: brecha.baseDays },
-    { concepto: 'Dias Comparado', valor: brecha.compDays },
-    { concepto: 'Promedio Hrs Totales/dia Comp', valor: brecha.avgHTcomp.toFixed(1) },
-    { concepto: 'Promedio Hrs Operativas/dia Comp', valor: brecha.avgHopComp.toFixed(1) },
-    { concepto: 'Perdida Disponibilidad (h/dia)', valor: brecha.lostDisp.toFixed(2) },
-    { concepto: 'Perdida UEBD (h/dia)', valor: brecha.lostUEBD.toFixed(2) },
-    { concepto: 'Perdida Rendimiento F09 (h/dia)', valor: brecha.lostRendF09.toFixed(2) },
-    { concepto: 'Perdida Total (h/dia)', valor: brecha.lostTotal.toFixed(2) },
+    ['Disponibilidad Base (%)', brecha.baseDisp.toFixed(2)],
+    ['Disponibilidad Comparado (%)', brecha.compDisp.toFixed(2)],
+    ['Brecha Disponibilidad (pp)', brecha.dispGapPP.toFixed(2)],
+    ['UEBD Base (%)', brecha.baseUEBD.toFixed(2)],
+    ['UEBD Comparado (%)', brecha.compUEBD.toFixed(2)],
+    ['Brecha UEBD (pp)', brecha.uebdGapPP.toFixed(2)],
+    ['Dias Base', brecha.baseDays],
+    ['Dias Comparado', brecha.compDays],
+    ['Prom Hrs Totales/dia Comp', brecha.avgHTcomp.toFixed(1)],
+    ['Prom Hrs Operativas/dia Comp', brecha.avgHopComp.toFixed(1)],
+    ['Perdida Disponibilidad (h/dia)', brecha.lostDisp.toFixed(2)],
+    ['Perdida UEBD (h/dia)', brecha.lostUEBD.toFixed(2)],
+    ['Perdida Rendimiento F09 (h/dia)', brecha.lostRendF09.toFixed(2)],
+    ['Perdida Total (h/dia)', brecha.lostTotal.toFixed(2)],
   ];
-  document.getElementById('brecha-table-container').innerHTML = buildTable(['Concepto', 'Valor'], rows.map(r => [r.concepto, r.valor]));
+  document.getElementById('brecha-table-container').innerHTML = buildTable(['Concepto', 'Valor'], rows);
 }
 
 function renderCodeImpactTab(impactUEBD, impactDisp, topN) {
-  // UEBD waterfall
-  const topUEBD = impactUEBD.impactRows.slice(0, topN);
-  renderWaterfallChart('chart-waterfall-uebd', `Top ${topN} Codigos - Impacto UEBD (pp)`, topUEBD);
+  renderWaterfallChart('chart-waterfall-uebd', `Top ${topN} Codigos - Impacto UEBD (pp)`, impactUEBD.impactRows.slice(0, topN));
   renderImpactTable('code-uebd-table', impactUEBD, 'UEBD');
-
-  // Disp waterfall
-  const topDisp = impactDisp.impactRows.slice(0, topN);
-  renderWaterfallChart('chart-waterfall-disp', `Top ${topN} Codigos - Impacto Disponibilidad (pp)`, topDisp);
+  renderWaterfallChart('chart-waterfall-disp', `Top ${topN} Codigos - Impacto Disponibilidad (pp)`, impactDisp.impactRows.slice(0, topN));
   renderImpactTable('code-disp-table', impactDisp, 'Disponibilidad');
 }
 
@@ -855,8 +866,8 @@ function renderImpactTable(containerId, impact, label) {
     i + 1, r.code, r.baseH.toFixed(3), r.compH.toFixed(3), r.deltaH.toFixed(3),
     colorVal(r.attrPP, 2), r.cumPP.toFixed(2), r.sharePct.toFixed(1) + '%'
   ]);
-  const headerRow = `<div style="margin-bottom:8px;font-size:0.88rem;"><b>Brecha ${label}:</b> ${impact.gapPP.toFixed(2)} pp | Base: ${(impact.baseRatio * 100).toFixed(2)}% | Comp: ${(impact.compRatio * 100).toFixed(2)}% | Factor escala: ${impact.scaleFactor.toFixed(4)}</div>`;
-  document.getElementById(containerId).innerHTML = headerRow + buildTable(headers, rows);
+  const info = `<div style="margin-bottom:8px;font-size:0.88rem;"><b>Brecha ${label}:</b> ${impact.gapPP.toFixed(2)} pp | Base: ${(impact.baseRatio * 100).toFixed(2)}% | Comp: ${(impact.compRatio * 100).toFixed(2)}% | Factor escala: ${impact.scaleFactor.toFixed(4)}</div>`;
+  document.getElementById(containerId).innerHTML = info + buildTable(headers, rows);
 }
 
 function renderDailyTab() {
@@ -871,24 +882,18 @@ function updateDailyTable() {
   const rig = document.getElementById('daily-rig-filter').value;
 
   let rows = [];
-  if (period === 'all' || period === 'base') {
-    for (const dr of baseData.dailyFleetRows) rows.push({ ...dr, periodo: 'Base' });
-  }
-  if (period === 'all' || period === 'comp') {
-    for (const dr of compData.dailyFleetRows) rows.push({ ...dr, periodo: 'Comp' });
-  }
 
-  // If specific rig, recalculate from dailyMetrics
-  if (rig !== 'all') {
-    rows = [];
+  if (rig === 'all') {
+    if (period === 'all' || period === 'base') for (const dr of baseData.dailyFleetRows) rows.push({ ...dr, periodo: 'Base' });
+    if (period === 'all' || period === 'comp') for (const dr of compData.dailyFleetRows) rows.push({ ...dr, periodo: 'Comp' });
+  } else {
     const addRigDaily = (data, label) => {
       for (const [dateStr, rigs] of Object.entries(data.dailyMetrics)) {
         if (rigs[rig]) {
           const m = rigs[rig];
           const hopD = m.ht - m.hmp - m.hmnp;
           rows.push({
-            fecha: dateStr, periodo: label,
-            ht: m.ht, he: m.he, hr: m.hr, hmp: m.hmp, hmnp: m.hmnp, ho: m.ho,
+            fecha: dateStr, periodo: label, ht: m.ht, he: m.he, hr: m.hr, hmp: m.hmp, hmnp: m.hmnp, ho: m.ho,
             hop: Math.max(hopD, 0),
             disp: m.ht > 0 ? Math.max(hopD, 0) / m.ht * 100 : 0,
             uebd: hopD > 0 ? m.he / Math.max(hopD, 0) * 100 : 0
@@ -902,27 +907,20 @@ function updateDailyTable() {
 
   rows.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
-  // Chart
-  const labels = rows.map(r => r.fecha);
-  const dispVals = rows.map(r => r.disp);
-  const uebdVals = rows.map(r => r.uebd);
-
   destroyChart('chart-daily-disp');
-  const ctx = document.getElementById('chart-daily-disp').getContext('2d');
-  charts['chart-daily-disp'] = new Chart(ctx, {
+  charts['chart-daily-disp'] = new Chart(document.getElementById('chart-daily-disp').getContext('2d'), {
     type: 'line',
     data: {
-      labels,
+      labels: rows.map(r => r.fecha),
       datasets: [
-        { label: 'Disponibilidad %', data: dispVals, borderColor: '#2980b9', backgroundColor: 'rgba(41,128,185,0.1)', fill: true, tension: 0.3, pointRadius: 1 },
-        { label: 'UEBD %', data: uebdVals, borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 1 }
+        { label: 'Disponibilidad %', data: rows.map(r => r.disp), borderColor: '#2980b9', backgroundColor: 'rgba(41,128,185,0.1)', fill: true, tension: 0.3, pointRadius: 1 },
+        { label: 'UEBD %', data: rows.map(r => r.uebd), borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 1 }
       ]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } },
       scales: { y: { min: 0, max: 100, title: { display: true, text: '%' } } } }
   });
 
-  // Table
   const headers = ['Fecha', 'Periodo', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Reserva', 'Otras', 'Disp %', 'UEBD %'];
   const tableRows = rows.map(r => [
     r.fecha, r.periodo, r.ht.toFixed(1), r.he.toFixed(1), r.hop.toFixed(1),
@@ -930,8 +928,6 @@ function updateDailyTable() {
     colorVal2(r.disp, 80), colorVal2(r.uebd, 60)
   ]);
   document.getElementById('daily-table-container').innerHTML = buildTable(headers, tableRows);
-
-  // Store for export
   analysisResult._dailyExport = rows;
 }
 
@@ -942,40 +938,28 @@ function renderMonthlyTab() {
     ...compData.monthlyRows.map(r => ({ ...r, periodo: 'Comp' }))
   ].sort((a, b) => a.mes.localeCompare(b.mes));
 
-  // Charts
   const labels = allMonthly.map(r => r.mes + ' (' + r.periodo + ')');
 
   destroyChart('chart-monthly-disp');
-  const ctx1 = document.getElementById('chart-monthly-disp').getContext('2d');
-  charts['chart-monthly-disp'] = new Chart(ctx1, {
+  charts['chart-monthly-disp'] = new Chart(document.getElementById('chart-monthly-disp').getContext('2d'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Disponibilidad %', data: allMonthly.map(r => r.disp),
-        backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#3498db' : '#e74c3c')
-      }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Disponibilidad Mensual (%)' } },
+    data: { labels, datasets: [{ label: 'Disponibilidad %', data: allMonthly.map(r => r.disp),
+      backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#3498db' : '#e74c3c') }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, title: { display: true, text: 'Disponibilidad Mensual (%)' } },
       scales: { y: { min: 0 } } }
   });
 
   destroyChart('chart-monthly-uebd');
-  const ctx2 = document.getElementById('chart-monthly-uebd').getContext('2d');
-  charts['chart-monthly-uebd'] = new Chart(ctx2, {
+  charts['chart-monthly-uebd'] = new Chart(document.getElementById('chart-monthly-uebd').getContext('2d'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'UEBD %', data: allMonthly.map(r => r.uebd),
-        backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#2ecc71' : '#e67e22')
-      }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'UEBD Mensual (%)' } },
+    data: { labels, datasets: [{ label: 'UEBD %', data: allMonthly.map(r => r.uebd),
+      backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#2ecc71' : '#e67e22') }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, title: { display: true, text: 'UEBD Mensual (%)' } },
       scales: { y: { min: 0 } } }
   });
 
-  // Table
   const headers = ['Mes', 'Periodo', 'Dias', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Disp %', 'UEBD %'];
   const tableRows = allMonthly.map(r => [
     r.mes, r.periodo, r.dias, r.ht.toFixed(0), r.he.toFixed(0), r.hop.toFixed(0),
@@ -987,34 +971,32 @@ function renderMonthlyTab() {
 
 function renderRigTab() {
   const { baseData, compData } = analysisResult;
-  const allRigs = [...baseData.rigRows.map(r => ({ ...r, periodo: 'Base' })),
-    ...compData.rigRows.map(r => ({ ...r, periodo: 'Comp' }))];
+  const allRigs = [
+    ...baseData.rigRows.map(r => ({ ...r, periodo: 'Base' })),
+    ...compData.rigRows.map(r => ({ ...r, periodo: 'Comp' }))
+  ];
 
-  // Chart comparing rigs
-  const baseRigs = baseData.rigRows;
-  const compRigs = compData.rigRows;
-  const rigLabels = [...new Set([...baseRigs.map(r => r.equipo), ...compRigs.map(r => r.equipo)])].sort();
+  const rigLabels = [...new Set([...baseData.rigRows.map(r => r.equipo), ...compData.rigRows.map(r => r.equipo)])].sort();
 
   destroyChart('chart-rig-comparison');
-  const ctx = document.getElementById('chart-rig-comparison').getContext('2d');
-  charts['chart-rig-comparison'] = new Chart(ctx, {
+  charts['chart-rig-comparison'] = new Chart(document.getElementById('chart-rig-comparison').getContext('2d'), {
     type: 'bar',
     data: {
       labels: rigLabels,
       datasets: [
-        { label: 'Disp Base %', data: rigLabels.map(l => { const r = baseRigs.find(x => x.equipo === l); return r ? r.disp : 0; }), backgroundColor: '#3498db' },
-        { label: 'Disp Comp %', data: rigLabels.map(l => { const r = compRigs.find(x => x.equipo === l); return r ? r.disp : 0; }), backgroundColor: '#e74c3c' },
-        { label: 'UEBD Base %', data: rigLabels.map(l => { const r = baseRigs.find(x => x.equipo === l); return r ? r.uebd : 0; }), backgroundColor: '#2ecc71' },
-        { label: 'UEBD Comp %', data: rigLabels.map(l => { const r = compRigs.find(x => x.equipo === l); return r ? r.uebd : 0; }), backgroundColor: '#e67e22' },
+        { label: 'Disp Base %', data: rigLabels.map(l => { const r = baseData.rigRows.find(x => x.equipo === l); return r ? r.disp : 0; }), backgroundColor: '#3498db' },
+        { label: 'Disp Comp %', data: rigLabels.map(l => { const r = compData.rigRows.find(x => x.equipo === l); return r ? r.disp : 0; }), backgroundColor: '#e74c3c' },
+        { label: 'UEBD Base %', data: rigLabels.map(l => { const r = baseData.rigRows.find(x => x.equipo === l); return r ? r.uebd : 0; }), backgroundColor: '#2ecc71' },
+        { label: 'UEBD Comp %', data: rigLabels.map(l => { const r = compData.rigRows.find(x => x.equipo === l); return r ? r.uebd : 0; }), backgroundColor: '#e67e22' },
       ]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } },
       scales: { y: { min: 0, max: 100 } } }
   });
 
-  // Table
   const headers = ['Equipo', 'Periodo', 'Dias', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Disp %', 'UEBD %'];
-  const tableRows = allRigs.sort((a, b) => a.equipo.localeCompare(b.equipo) || a.periodo.localeCompare(b.periodo))
+  const tableRows = allRigs
+    .sort((a, b) => a.equipo.localeCompare(b.equipo) || a.periodo.localeCompare(b.periodo))
     .map(r => [r.equipo, r.periodo, r.dias, r.ht.toFixed(0), r.he.toFixed(0), r.hop.toFixed(0),
       r.hmp.toFixed(0), r.hmnp.toFixed(0), colorVal2(r.disp, 80), colorVal2(r.uebd, 60)]);
   document.getElementById('rig-table-container').innerHTML = buildTable(headers, tableRows);
@@ -1024,54 +1006,52 @@ function renderRigTab() {
 function renderChartsTab() {
   const { baseData, compData } = analysisResult;
 
-  // Trend Disponibilidad
+  // Combined trend
+  const allDaily = [
+    ...baseData.dailyFleetRows.map(r => ({ ...r, p: 'Base' })),
+    ...compData.dailyFleetRows.map(r => ({ ...r, p: 'Comp' }))
+  ].sort((a, b) => a.fecha.localeCompare(b.fecha));
+
   destroyChart('chart-trend-disp');
-  const ctx1 = document.getElementById('chart-trend-disp').getContext('2d');
-  charts['chart-trend-disp'] = new Chart(ctx1, {
+  charts['chart-trend-disp'] = new Chart(document.getElementById('chart-trend-disp').getContext('2d'), {
     type: 'line',
     data: {
-      labels: [...baseData.dailyFleetRows.map(r => r.fecha), ...compData.dailyFleetRows.map(r => r.fecha)],
+      labels: allDaily.map(r => r.fecha),
       datasets: [{
-        label: 'Disponibilidad %',
-        data: [...baseData.dailyFleetRows.map(r => r.disp), ...compData.dailyFleetRows.map(r => r.disp)],
-        borderColor: '#2980b9', fill: false, tension: 0.2, pointRadius: 0.5
+        label: 'Disponibilidad %', data: allDaily.map(r => r.disp),
+        borderColor: '#2980b9', fill: false, tension: 0.2, pointRadius: 0.5,
+        segment: { borderColor: ctx => allDaily[ctx.p0DataIndex]?.p === 'Comp' ? '#e74c3c' : '#2980b9' }
       }]
     },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { title: { display: true, text: 'Tendencia Disponibilidad - Ambos Periodos' } },
+      plugins: { title: { display: true, text: 'Tendencia Disponibilidad (azul=Base, rojo=Comparado)' } },
       scales: { y: { min: 0, max: 100 } } }
   });
 
-  // Trend UEBD
   destroyChart('chart-trend-uebd');
-  const ctx2 = document.getElementById('chart-trend-uebd').getContext('2d');
-  charts['chart-trend-uebd'] = new Chart(ctx2, {
+  charts['chart-trend-uebd'] = new Chart(document.getElementById('chart-trend-uebd').getContext('2d'), {
     type: 'line',
     data: {
-      labels: [...baseData.dailyFleetRows.map(r => r.fecha), ...compData.dailyFleetRows.map(r => r.fecha)],
+      labels: allDaily.map(r => r.fecha),
       datasets: [{
-        label: 'UEBD %',
-        data: [...baseData.dailyFleetRows.map(r => r.uebd), ...compData.dailyFleetRows.map(r => r.uebd)],
-        borderColor: '#e67e22', fill: false, tension: 0.2, pointRadius: 0.5
+        label: 'UEBD %', data: allDaily.map(r => r.uebd),
+        borderColor: '#e67e22', fill: false, tension: 0.2, pointRadius: 0.5,
+        segment: { borderColor: ctx => allDaily[ctx.p0DataIndex]?.p === 'Comp' ? '#c0392b' : '#e67e22' }
       }]
     },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { title: { display: true, text: 'Tendencia UEBD - Ambos Periodos' } },
+      plugins: { title: { display: true, text: 'Tendencia UEBD (naranja=Base, rojo=Comparado)' } },
       scales: { y: { min: 0, max: 100 } } }
   });
 
-  // Pie charts: hours breakdown
   const pieFn = (canvasId, title, data) => {
     destroyChart(canvasId);
-    const ctx = document.getElementById(canvasId).getContext('2d');
-    charts[canvasId] = new Chart(ctx, {
+    charts[canvasId] = new Chart(document.getElementById(canvasId).getContext('2d'), {
       type: 'doughnut',
       data: {
-        labels: ['Efectivo', 'Reserva', 'Mant. Programada', 'Mant. No Prog.', 'Otras'],
-        datasets: [{
-          data: [data.he, data.hr, data.hmp, data.hmnp, data.ho],
-          backgroundColor: ['#27ae60', '#3498db', '#e74c3c', '#e67e22', '#95a5a6']
-        }]
+        labels: ['Efectivo', 'Reserva', 'Mant. Prog.', 'Mant. No Prog.', 'Otras'],
+        datasets: [{ data: [data.he, data.hr, data.hmp, data.hmnp, data.ho],
+          backgroundColor: ['#27ae60', '#3498db', '#e74c3c', '#e67e22', '#95a5a6'] }]
       },
       options: { responsive: true, maintainAspectRatio: false,
         plugins: { title: { display: true, text: title }, legend: { position: 'bottom' } } }
@@ -1082,22 +1062,16 @@ function renderChartsTab() {
 }
 
 // ===== CHART HELPERS =====
-function destroyChart(id) {
-  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
-}
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
 function renderBarComparison(canvasId, title, labels, baseVals, compVals) {
   destroyChart(canvasId);
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  charts[canvasId] = new Chart(ctx, {
+  charts[canvasId] = new Chart(document.getElementById(canvasId).getContext('2d'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Base', data: baseVals, backgroundColor: '#3498db' },
-        { label: 'Comparado', data: compVals, backgroundColor: '#e74c3c' }
-      ]
-    },
+    data: { labels, datasets: [
+      { label: 'Base', data: baseVals, backgroundColor: '#3498db' },
+      { label: 'Comparado', data: compVals, backgroundColor: '#e74c3c' }
+    ] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { title: { display: true, text: title } },
       scales: { y: { min: 0, max: 100, title: { display: true, text: '%' } } } }
@@ -1106,10 +1080,8 @@ function renderBarComparison(canvasId, title, labels, baseVals, compVals) {
 
 function renderStackedBreakdown(canvasId, baseData, compData) {
   destroyChart(canvasId);
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  const bd = baseData.dayCount > 0 ? baseData.dayCount : 1;
-  const cd = compData.dayCount > 0 ? compData.dayCount : 1;
-  charts[canvasId] = new Chart(ctx, {
+  const bd = Math.max(baseData.dayCount, 1), cd = Math.max(compData.dayCount, 1);
+  charts[canvasId] = new Chart(document.getElementById(canvasId).getContext('2d'), {
     type: 'bar',
     data: {
       labels: ['Base (h/dia)', 'Comparado (h/dia)'],
@@ -1129,32 +1101,16 @@ function renderStackedBreakdown(canvasId, baseData, compData) {
 
 function renderWaterfallChart(canvasId, title, impactRows) {
   destroyChart(canvasId);
-  const ctx = document.getElementById(canvasId).getContext('2d');
   const labels = impactRows.map(r => r.code.length > 25 ? r.code.slice(0, 22) + '...' : r.code);
   const values = impactRows.map(r => r.attrPP);
   const colors = values.map(v => v < 0 ? '#e74c3c' : '#27ae60');
-
-  charts[canvasId] = new Chart(ctx, {
+  charts[canvasId] = new Chart(document.getElementById(canvasId).getContext('2d'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Impacto (pp)',
-        data: values,
-        backgroundColor: colors,
-        borderColor: colors.map(c => c === '#e74c3c' ? '#c0392b' : '#219a52'),
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      indexAxis: 'y',
+    data: { labels, datasets: [{ label: 'Impacto (pp)', data: values, backgroundColor: colors,
+      borderColor: colors.map(c => c === '#e74c3c' ? '#c0392b' : '#219a52'), borderWidth: 1 }] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
       plugins: { title: { display: true, text: title }, legend: { display: false } },
-      scales: {
-        x: { title: { display: true, text: 'Puntos Porcentuales' } },
-        y: { ticks: { font: { size: 10 } } }
-      }
-    }
+      scales: { x: { title: { display: true, text: 'Puntos Porcentuales' } }, y: { ticks: { font: { size: 10 } } } } }
   });
 }
 
@@ -1163,25 +1119,19 @@ function buildTable(headers, rows) {
   let html = '<table><thead><tr>';
   for (const h of headers) html += `<th>${h}</th>`;
   html += '</tr></thead><tbody>';
-  for (const row of rows) {
-    html += '<tr>';
-    for (const cell of row) html += `<td>${cell}</td>`;
-    html += '</tr>';
-  }
+  for (const row of rows) { html += '<tr>'; for (const cell of row) html += `<td>${cell}</td>`; html += '</tr>'; }
   html += '</tbody></table>';
   return html;
 }
 
-function colorVal(v, decimals) {
+function colorVal(v, dec) {
   const n = typeof v === 'number' ? v : parseFloat(v);
-  const cls = n < 0 ? 'text-danger' : n > 0 ? 'text-success' : '';
-  return `<span class="${cls}">${n.toFixed(decimals)}</span>`;
+  return `<span class="${n < 0 ? 'text-danger' : n > 0 ? 'text-success' : ''}">${n.toFixed(dec)}</span>`;
 }
 
 function colorVal2(v, threshold) {
   const n = typeof v === 'number' ? v : parseFloat(v);
-  const cls = n >= threshold ? 'text-success' : 'text-danger';
-  return `<span class="${cls}">${n.toFixed(2)}</span>`;
+  return `<span class="${n >= threshold ? 'text-success' : 'text-danger'}">${n.toFixed(2)}</span>`;
 }
 
 // ===== TAB NAVIGATION =====
@@ -1205,33 +1155,26 @@ document.getElementById('code-subtabs').addEventListener('click', e => {
 // ===== CSV EXPORT =====
 function exportCSV(type) {
   if (!analysisResult) return;
-  let csvContent = '';
-  let filename = '';
+  let csv = '', filename = '';
 
   if (type === 'daily') {
     const rows = analysisResult._dailyExport || [];
-    csvContent = 'fecha;periodo;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;reserva;otras;disponibilidad_pct;uebd_pct\n';
-    for (const r of rows) {
-      csvContent += `${r.fecha};${r.periodo};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.hr.toFixed(2)};${r.ho.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
-    }
+    csv = 'fecha;periodo;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;reserva;otras;disponibilidad_pct;uebd_pct\n';
+    for (const r of rows) csv += `${r.fecha};${r.periodo};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.hr.toFixed(2)};${r.ho.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
     filename = 'detalle_diario.csv';
   } else if (type === 'monthly') {
     const rows = analysisResult._monthlyExport || [];
-    csvContent = 'mes;periodo;dias;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;disponibilidad_pct;uebd_pct\n';
-    for (const r of rows) {
-      csvContent += `${r.mes};${r.periodo};${r.dias};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
-    }
+    csv = 'mes;periodo;dias;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;disponibilidad_pct;uebd_pct\n';
+    for (const r of rows) csv += `${r.mes};${r.periodo};${r.dias};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
     filename = 'resumen_mensual.csv';
   } else if (type === 'rigs') {
     const rows = analysisResult._rigExport || [];
-    csvContent = 'equipo;periodo;dias;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;disponibilidad_pct;uebd_pct\n';
-    for (const r of rows) {
-      csvContent += `${r.equipo};${r.periodo};${r.dias};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
-    }
+    csv = 'equipo;periodo;dias;hrs_totales;hrs_efectivo;hrs_operativas;mant_prog;mant_no_prog;disponibilidad_pct;uebd_pct\n';
+    for (const r of rows) csv += `${r.equipo};${r.periodo};${r.dias};${r.ht.toFixed(2)};${r.he.toFixed(2)};${r.hop.toFixed(2)};${r.hmp.toFixed(2)};${r.hmnp.toFixed(2)};${r.disp.toFixed(4)};${r.uebd.toFixed(4)}\n`;
     filename = 'resumen_perforadoras.csv';
   }
 
-  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = filename;
