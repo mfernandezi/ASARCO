@@ -296,10 +296,15 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
   <!-- Tab: Mensual -->
   <div class="card tab-content hidden" id="tab-mensual">
     <h2>Resumen Mensual de Flota</h2>
+    <div id="monthly-kpis" class="kpi-grid"></div>
+    <h3>Comparacion Mensual Base vs Comparado</h3>
+    <div class="table-scroll" id="monthly-comparison-container"></div>
+    <h3>Graficos Mensuales</h3>
     <div class="chart-grid">
       <div class="chart-container"><canvas id="chart-monthly-disp"></canvas></div>
       <div class="chart-container"><canvas id="chart-monthly-uebd"></canvas></div>
     </div>
+    <h3>Detalle por Mes</h3>
     <div class="table-scroll" id="monthly-table-container"></div>
     <div class="input-row mt-10" style="justify-content:flex-end;">
       <button class="btn btn-sm btn-success" onclick="exportCSV('monthly')">Exportar CSV</button>
@@ -932,38 +937,109 @@ function updateDailyTable() {
 }
 
 function renderMonthlyTab() {
-  const { baseData, compData } = analysisResult;
+  const { baseData, compData, dateStartBase, dateEndBase, dateStartComp, dateEndComp } = analysisResult;
   const allMonthly = [
     ...baseData.monthlyRows.map(r => ({ ...r, periodo: 'Base' })),
     ...compData.monthlyRows.map(r => ({ ...r, periodo: 'Comp' }))
   ].sort((a, b) => a.mes.localeCompare(b.mes));
 
+  // ---- KPIs: promedios mensuales base vs comp ----
+  const avgMonth = (rows) => {
+    if (!rows.length) return { disp: 0, uebd: 0, he: 0, ht: 0 };
+    const s = rows.reduce((a, r) => ({ disp: a.disp + r.disp, uebd: a.uebd + r.uebd, he: a.he + r.he, ht: a.ht + r.ht }), { disp: 0, uebd: 0, he: 0, ht: 0 });
+    return { disp: s.disp / rows.length, uebd: s.uebd / rows.length, he: s.he / rows.length, ht: s.ht / rows.length };
+  };
+  const avgBase = avgMonth(baseData.monthlyRows);
+  const avgComp = avgMonth(compData.monthlyRows);
+  const dDisp = avgComp.disp - avgBase.disp;
+  const dUebd = avgComp.uebd - avgBase.uebd;
+  const dHe = avgComp.he - avgBase.he;
+
+  document.getElementById('monthly-kpis').innerHTML = `
+    <div class="kpi-box"><div class="kpi-label">Meses Base</div><div class="kpi-value">${baseData.monthlyRows.length}</div><div class="kpi-sub">${dateStartBase} a ${dateEndBase}</div></div>
+    <div class="kpi-box"><div class="kpi-label">Meses Comparado</div><div class="kpi-value">${compData.monthlyRows.length}</div><div class="kpi-sub">${dateStartComp} a ${dateEndComp}</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Prom Disp Base</div><div class="kpi-value">${avgBase.disp.toFixed(2)}%</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Prom Disp Comp</div><div class="kpi-value ${dDisp >= 0 ? 'text-success' : 'text-danger'}">${avgComp.disp.toFixed(2)}%</div><div class="kpi-sub">${dDisp >= 0 ? '+' : ''}${dDisp.toFixed(2)} pp</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Prom UEBD Base</div><div class="kpi-value">${avgBase.uebd.toFixed(2)}%</div></div>
+    <div class="kpi-box highlight"><div class="kpi-label">Prom UEBD Comp</div><div class="kpi-value ${dUebd >= 0 ? 'text-success' : 'text-danger'}">${avgComp.uebd.toFixed(2)}%</div><div class="kpi-sub">${dUebd >= 0 ? '+' : ''}${dUebd.toFixed(2)} pp</div></div>
+    <div class="kpi-box"><div class="kpi-label">Prom Hrs Efect/Mes Base</div><div class="kpi-value">${avgBase.he.toFixed(0)}</div></div>
+    <div class="kpi-box"><div class="kpi-label">Prom Hrs Efect/Mes Comp</div><div class="kpi-value ${dHe >= 0 ? 'text-success' : 'text-danger'}">${avgComp.he.toFixed(0)}</div><div class="kpi-sub">${dHe >= 0 ? '+' : ''}${dHe.toFixed(0)} h</div></div>
+  `;
+
+  // ---- Comparison table: each comp month vs avg base ----
+  const compHeaders = ['Mes Comp', 'Dias', 'Disp %', 'vs Base', 'UEBD %', 'vs Base', 'Hrs Efect', 'vs Base', 'Mant Prog', 'Mant NoProg'];
+  const compRows = compData.monthlyRows.map(r => {
+    const dispDelta = r.disp - avgBase.disp;
+    const uebdDelta = r.uebd - avgBase.uebd;
+    const heDelta = r.he - avgBase.he;
+    return [
+      r.mes, r.dias,
+      r.disp.toFixed(2), colorVal(dispDelta, 2) + ' pp',
+      r.uebd.toFixed(2), colorVal(uebdDelta, 2) + ' pp',
+      r.he.toFixed(0), colorVal(heDelta, 0) + ' h',
+      r.hmp.toFixed(0), r.hmnp.toFixed(0)
+    ];
+  });
+  // Add summary row
+  if (compData.monthlyRows.length > 1) {
+    compRows.push([
+      '<b>Promedio</b>', '', `<b>${avgComp.disp.toFixed(2)}</b>`, `<b>${colorVal(dDisp, 2)} pp</b>`,
+      `<b>${avgComp.uebd.toFixed(2)}</b>`, `<b>${colorVal(dUebd, 2)} pp</b>`,
+      `<b>${avgComp.he.toFixed(0)}</b>`, `<b>${colorVal(dHe, 0)} h</b>`, '', ''
+    ]);
+  }
+  const infoLine = `<div style="margin-bottom:8px;font-size:0.85rem;color:#666;">Cada mes comparado se contrasta contra el <b>promedio mensual de la Base</b> (Disp ${avgBase.disp.toFixed(2)}%, UEBD ${avgBase.uebd.toFixed(2)}%, Hrs Efect ${avgBase.he.toFixed(0)})</div>`;
+  document.getElementById('monthly-comparison-container').innerHTML = infoLine + buildTable(compHeaders, compRows);
+
+  // ---- Charts ----
   const labels = allMonthly.map(r => r.mes + ' (' + r.periodo + ')');
 
   destroyChart('chart-monthly-disp');
   charts['chart-monthly-disp'] = new Chart(document.getElementById('chart-monthly-disp').getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets: [{ label: 'Disponibilidad %', data: allMonthly.map(r => r.disp),
-      backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#3498db' : '#e74c3c') }] },
+    data: {
+      labels,
+      datasets: [
+        { label: 'Disponibilidad %', data: allMonthly.map(r => r.disp),
+          backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#3498db' : '#e74c3c') }
+      ]
+    },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, title: { display: true, text: 'Disponibilidad Mensual (%)' } },
-      scales: { y: { min: 0 } } }
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'Disponibilidad Mensual (%) — Azul=Base, Rojo=Comparado' },
+        annotation: undefined
+      },
+      scales: { y: { min: 0, suggestedMax: 100,
+        title: { display: true, text: '%' } } } }
   });
 
   destroyChart('chart-monthly-uebd');
   charts['chart-monthly-uebd'] = new Chart(document.getElementById('chart-monthly-uebd').getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets: [{ label: 'UEBD %', data: allMonthly.map(r => r.uebd),
-      backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#2ecc71' : '#e67e22') }] },
+    data: {
+      labels,
+      datasets: [
+        { label: 'UEBD %', data: allMonthly.map(r => r.uebd),
+          backgroundColor: allMonthly.map(r => r.periodo === 'Base' ? '#2ecc71' : '#e67e22') }
+      ]
+    },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, title: { display: true, text: 'UEBD Mensual (%)' } },
-      scales: { y: { min: 0 } } }
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'UEBD Mensual (%) — Verde=Base, Naranja=Comparado' }
+      },
+      scales: { y: { min: 0, suggestedMax: 100,
+        title: { display: true, text: '%' } } } }
   });
 
-  const headers = ['Mes', 'Periodo', 'Dias', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Disp %', 'UEBD %'];
+  // ---- Detail table ----
+  const headers = ['Mes', 'Periodo', 'Dias', 'Hrs Total', 'Hrs Efect', 'Hrs Oper', 'Mant Prog', 'Mant NoProg', 'Reserva', 'Otras', 'Disp %', 'UEBD %'];
   const tableRows = allMonthly.map(r => [
-    r.mes, r.periodo, r.dias, r.ht.toFixed(0), r.he.toFixed(0), r.hop.toFixed(0),
-    r.hmp.toFixed(0), r.hmnp.toFixed(0), r.disp.toFixed(2), r.uebd.toFixed(2)
+    r.mes, `<span class="badge ${r.periodo === 'Base' ? 'badge-info' : 'badge-warn'}">${r.periodo}</span>`,
+    r.dias, r.ht.toFixed(0), r.he.toFixed(0), r.hop.toFixed(0),
+    r.hmp.toFixed(0), r.hmnp.toFixed(0), r.hr.toFixed(0), r.ho.toFixed(0),
+    colorVal2(r.disp, 80), colorVal2(r.uebd, 60)
   ]);
   document.getElementById('monthly-table-container').innerHTML = buildTable(headers, tableRows);
   analysisResult._monthlyExport = allMonthly;
