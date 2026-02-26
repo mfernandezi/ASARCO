@@ -289,7 +289,7 @@
 
 <div class="upload-section" id="uploadSection">
     <h2>Subir Archivos de Datos</h2>
-    <p style="color:var(--text-light); margin-bottom:1.2rem;">Sube los 3 archivos para generar el análisis completo. Todo se procesa en tu navegador, no se sube nada a internet.</p>
+    <p style="color:var(--text-light); margin-bottom:1.2rem;">Sube los archivos para generar el análisis. El Plan 2025 es <b>opcional</b> (ya viene incluido por defecto). Todo se procesa en tu navegador.</p>
 
     <div class="upload-grid">
         <div class="upload-card" id="card-csv">
@@ -304,11 +304,11 @@
             <input type="file" id="file-mensual" accept=".xlsx,.xls" onchange="handleFile('mensual')">
             <div class="status" id="status-mensual"></div>
         </div>
-        <div class="upload-card" id="card-plan">
-            <label>3. Plan 2025 (Excel)</label>
-            <div class="desc">Archivo Planes MENSUALES 2025.xlsx con KPIs planificados</div>
+        <div class="upload-card" id="card-plan" style="opacity:0.75">
+            <label>3. Plan 2025 (Excel) <span style="background:#fefcbf;color:#744210;padding:0.1rem 0.5rem;border-radius:8px;font-size:0.72rem;font-weight:700">OPCIONAL</span></label>
+            <div class="desc">Ya incluido por defecto. Solo sube si quieres reemplazarlo con otra versión.</div>
             <input type="file" id="file-plan" accept=".xlsx,.xls" onchange="handleFile('plan')">
-            <div class="status" id="status-plan"></div>
+            <div class="status" id="status-plan">Usando datos incorporados</div>
         </div>
     </div>
     <div class="btn-center">
@@ -322,7 +322,61 @@
 </div>
 
 <script>
-let DATA = { csv: null, mensual: null, plan: null };
+// Plan 2025 embebido (datos por defecto)
+const PLAN_DEFAULT = [
+{"Equipo":"PF03","Índices":"Disponibilidad","Unidad":"%","Enero":0.885946,"Febrero":0.885946,"Marzo":0.872870,"Abril":0.826519,"Mayo":0.834530,"Junio":0.865513,"Julio":0.859653,"Agosto":0.811559,"Septiembre":0.879167,"Octubre":0.880376,"Noviembre":0.876389,"Diciembre":0.850806},
+{"Equipo":"PF03","Índices":"Utilización","Unidad":"%","Enero":0.501917,"Febrero":0.335911,"Marzo":0.334287,"Abril":0.515223,"Mayo":0.228521,"Junio":0.225088,"Julio":0.474173,"Agosto":0.471981,"Septiembre":0.446286,"Octubre":0.365347,"Noviembre":0.356231,"Diciembre":0.369127},
+{"Equipo":"PF03","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":16.866,"Febrero":16.866,"Marzo":13.200,"Abril":11.357,"Mayo":12.986,"Junio":28.700,"Julio":26.244,"Agosto":18.939,"Septiembre":19.821,"Octubre":26.803,"Noviembre":25.043,"Diciembre":27.275},
+{"Equipo":"PF03","Índices":"Metros","Unidad":"m","Enero":5039.75,"Febrero":3372.89,"Marzo":3069.00,"Abril":3623.22,"Mayo":1998.55,"Junio":3069.42,"Julio":6556.89,"Agosto":5497.25,"Septiembre":5685.44,"Octubre":6470.03,"Noviembre":6282.79,"Diciembre":6235.57},
+{"Equipo":"PF03","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":298.82,"Febrero":199.99,"Marzo":196.08,"Abril":286.17,"Mayo":128.16,"Junio":130.92,"Julio":273.92,"Agosto":296.28,"Septiembre":282.50,"Octubre":239.30,"Noviembre":224.78,"Diciembre":233.66},
+{"Equipo":"PF07","Índices":"Disponibilidad","Unidad":"%","Enero":0.856228,"Febrero":0.856228,"Marzo":0.888893,"Abril":0.850060,"Mayo":0.876923,"Junio":0.769248,"Julio":0.871599,"Agosto":0.830645,"Septiembre":0.859722,"Octubre":0.760753,"Noviembre":0.866667,"Diciembre":0.862903},
+{"Equipo":"PF07","Índices":"Utilización","Unidad":"%","Enero":0.539202,"Febrero":0.510389,"Marzo":0.498415,"Abril":0.585230,"Mayo":0.462210,"Junio":0.514244,"Julio":0.487143,"Agosto":0.485811,"Septiembre":0.609874,"Octubre":0.607280,"Noviembre":0.654146,"Diciembre":0.636569},
+{"Equipo":"PF07","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":24.192,"Febrero":24.192,"Marzo":40.000,"Abril":20.357,"Mayo":21.893,"Junio":36.875,"Julio":36.678,"Agosto":51.761,"Septiembre":26.768,"Octubre":26.397,"Noviembre":20.198,"Diciembre":23.563},
+{"Equipo":"PF07","Índices":"Metros","Unidad":"m","Enero":7505.69,"Febrero":7104.61,"Marzo":13564.0,"Abril":7754.59,"Mayo":7813.04,"Junio":11336.6,"Julio":9612.65,"Agosto":12512.8,"Septiembre":10521.1,"Octubre":9366.12,"Noviembre":8365.12,"Diciembre":9943.60},
+{"Equipo":"PF07","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":310.25,"Febrero":293.67,"Marzo":297.72,"Abril":334.31,"Mayo":272.38,"Junio":265.83,"Julio":285.33,"Agosto":274.03,"Septiembre":377.51,"Octubre":343.72,"Noviembre":408.19,"Diciembre":408.68},
+{"Equipo":"PF21","Índices":"Disponibilidad","Unidad":"%","Enero":0.812208,"Febrero":0.812208,"Marzo":0.790476,"Abril":0.787362,"Mayo":0.828819,"Junio":0.862025,"Julio":0.749053,"Agosto":0.868280,"Septiembre":0.912500,"Octubre":0.790323,"Noviembre":0.818056,"Diciembre":0.806452},
+{"Equipo":"PF21","Índices":"Utilización","Unidad":"%","Enero":0.535706,"Febrero":0.544779,"Marzo":0.550012,"Abril":0.556546,"Mayo":0.437033,"Junio":0.576722,"Julio":0.479097,"Agosto":0.518519,"Septiembre":0.518393,"Octubre":0.612066,"Noviembre":0.659810,"Diciembre":0.654967},
+{"Equipo":"PF21","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":24.437,"Febrero":24.437,"Marzo":28.250,"Abril":39.500,"Mayo":38.071,"Junio":29.929,"Julio":45.000,"Agosto":48.877,"Septiembre":43.896,"Octubre":45.594,"Noviembre":28.480,"Diciembre":20.033},
+{"Equipo":"PF21","Índices":"Metros","Unidad":"m","Enero":7145.18,"Febrero":7266.20,"Marzo":9015.72,"Abril":11659.7,"Mayo":12223.4,"Junio":12147.7,"Julio":12251.0,"Agosto":14146.6,"Septiembre":14658.5,"Octubre":16292.2,"Noviembre":11478.9,"Diciembre":8052.39},
+{"Equipo":"PF21","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":292.39,"Febrero":297.34,"Marzo":292.17,"Abril":294.47,"Mayo":243.41,"Junio":334.08,"Julio":241.16,"Agosto":308.97,"Septiembre":340.58,"Octubre":359.90,"Noviembre":388.63,"Diciembre":392.98},
+{"Equipo":"PF22","Índices":"Disponibilidad","Unidad":"%","Enero":0.792803,"Febrero":0.792803,"Marzo":0.838443,"Abril":0.907661,"Mayo":0.820366,"Junio":0.820184,"Julio":0.756696,"Agosto":0.826613,"Septiembre":0.869444,"Octubre":0.827957,"Noviembre":0.825000,"Diciembre":0.770161},
+{"Equipo":"PF22","Índices":"Utilización","Unidad":"%","Enero":0.521200,"Febrero":0.610044,"Marzo":0.525535,"Abril":0.557072,"Mayo":0.507047,"Junio":0.518832,"Julio":0.500946,"Agosto":0.534464,"Septiembre":0.615841,"Octubre":0.598995,"Noviembre":0.640737,"Diciembre":0.641568},
+{"Equipo":"PF22","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":20.206,"Febrero":20.206,"Marzo":22.000,"Abril":47.875,"Mayo":43.250,"Junio":19.500,"Julio":21.639,"Agosto":22.889,"Septiembre":23.000,"Octubre":31.152,"Noviembre":33.731,"Diciembre":22.179},
+{"Equipo":"PF22","Índices":"Metros","Unidad":"m","Enero":5610.73,"Febrero":6567.13,"Marzo":7024.90,"Abril":12790.5,"Mayo":15124.1,"Junio":6848.29,"Julio":5784.00,"Agosto":7524.01,"Septiembre":8866.88,"Octubre":11543.5,"Noviembre":12635.8,"Diciembre":8158.30},
+{"Equipo":"PF22","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":277.68,"Febrero":325.01,"Marzo":296.10,"Abril":339.79,"Mayo":279.53,"Junio":285.96,"Julio":254.73,"Agosto":337.34,"Septiembre":385.52,"Octubre":368.98,"Noviembre":380.60,"Diciembre":367.62},
+{"Equipo":"PF23","Índices":"Disponibilidad","Unidad":"%","Enero":0.795455,"Febrero":0.795455,"Marzo":0.830879,"Abril":0.856197,"Mayo":0.857232,"Junio":0.843254,"Julio":0.890153,"Agosto":0.838710,"Septiembre":0.775556,"Octubre":0.771505,"Noviembre":0.804244,"Diciembre":0.838710},
+{"Equipo":"PF23","Índices":"Utilización","Unidad":"%","Enero":0.561547,"Febrero":0.675863,"Marzo":0.559398,"Abril":0.555261,"Mayo":0.466829,"Junio":0.500170,"Julio":0.477427,"Agosto":0.497964,"Septiembre":0.528255,"Octubre":0.591897,"Noviembre":0.616179,"Diciembre":0.538958},
+{"Equipo":"PF23","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":22.685,"Febrero":22.685,"Marzo":22.000,"Abril":21.875,"Mayo":22.000,"Junio":19.054,"Julio":22.000,"Agosto":24.585,"Septiembre":22.102,"Octubre":23.432,"Noviembre":21.429,"Diciembre":22.122},
+{"Equipo":"PF23","Índices":"Metros","Unidad":"m","Enero":6809.39,"Febrero":8195.60,"Marzo":7365.50,"Abril":7932.65,"Mayo":7567.63,"Junio":6862.92,"Julio":6905.84,"Agosto":6922.88,"Septiembre":6470.17,"Octubre":7966.01,"Noviembre":7729.27,"Diciembre":7431.40},
+{"Equipo":"PF23","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":300.17,"Febrero":361.28,"Marzo":312.34,"Abril":319.48,"Mayo":268.92,"Junio":283.43,"Julio":285.59,"Agosto":280.85,"Septiembre":314.11,"Octubre":351.85,"Noviembre":289.78,"Diciembre":337.79},
+{"Equipo":"PF24","Índices":"Disponibilidad","Unidad":"%","Enero":0.911290,"Febrero":0.911290,"Marzo":0.896505,"Abril":0.865749,"Mayo":0.802618,"Junio":0.864722,"Julio":0.855405,"Agosto":0.846505,"Septiembre":0.786111,"Octubre":0.853226,"Noviembre":0.912500,"Diciembre":0.791667},
+{"Equipo":"PF24","Índices":"Utilización","Unidad":"%","Enero":0.611120,"Febrero":0.528788,"Marzo":0.425838,"Abril":0.535297,"Mayo":0.427226,"Junio":0.599062,"Julio":0.446545,"Agosto":0.531685,"Septiembre":0.532822,"Octubre":0.610299,"Noviembre":0.617109,"Diciembre":0.636326},
+{"Equipo":"PF24","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":37.714,"Febrero":37.714,"Marzo":40.750,"Abril":21.802,"Mayo":28.250,"Junio":22.000,"Julio":22.000,"Agosto":23.626,"Septiembre":22.281,"Octubre":23.437,"Noviembre":21.551,"Diciembre":21.189},
+{"Equipo":"PF24","Índices":"Metros","Unidad":"m","Enero":14114.3,"Febrero":12212.8,"Marzo":10687.5,"Abril":7509.83,"Mayo":9831.94,"Junio":7658.43,"Julio":6402.71,"Agosto":6793.91,"Septiembre":6785.49,"Octubre":9080.10,"Noviembre":8645.01,"Diciembre":7906.84},
+{"Equipo":"PF24","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":374.24,"Febrero":323.82,"Marzo":256.55,"Abril":311.43,"Mayo":230.43,"Junio":348.11,"Julio":256.69,"Agosto":258.27,"Septiembre":321.25,"Octubre":387.42,"Noviembre":335.67,"Diciembre":383.83},
+{"Equipo":"PF25","Índices":"Disponibilidad","Unidad":"%","Enero":0.894416,"Febrero":0.894416,"Marzo":0.767532,"Abril":0.804385,"Mayo":0.854996,"Junio":0.857294,"Julio":0.749053,"Agosto":0.870968,"Septiembre":0.812500,"Octubre":0.840591,"Noviembre":0.883056,"Diciembre":0.795430},
+{"Equipo":"PF25","Índices":"Utilización","Unidad":"%","Enero":0.519483,"Febrero":0.584544,"Marzo":0.505355,"Abril":0.514086,"Mayo":0.456294,"Junio":0.565923,"Julio":0.478557,"Agosto":0.522025,"Septiembre":0.525941,"Octubre":0.611351,"Noviembre":0.602669,"Diciembre":0.569617},
+{"Equipo":"PF25","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":20.967,"Febrero":20.967,"Marzo":21.725,"Abril":21.179,"Mayo":21.450,"Junio":21.450,"Julio":22.000,"Agosto":24.747,"Septiembre":22.521,"Octubre":23.478,"Noviembre":21.847,"Diciembre":23.010},
+{"Equipo":"PF25","Índices":"Metros","Unidad":"m","Enero":6546.48,"Febrero":7366.37,"Marzo":6610.78,"Abril":7217.78,"Mayo":7270.24,"Junio":7433.47,"Julio":6518.06,"Agosto":7285.10,"Septiembre":6924.57,"Octubre":8973.62,"Noviembre":8346.67,"Diciembre":7720.18},
+{"Equipo":"PF25","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":312.23,"Febrero":351.34,"Marzo":260.65,"Abril":277.89,"Mayo":262.17,"Junio":326.03,"Julio":240.89,"Agosto":305.44,"Septiembre":307.68,"Octubre":382.34,"Noviembre":383.18,"Diciembre":337.10},
+{"Equipo":"PF26","Índices":"Disponibilidad","Unidad":"%","Enero":0.781663,"Febrero":0.781663,"Marzo":0.890101,"Abril":0.846527,"Mayo":0.778945,"Junio":0.849208,"Julio":0.916748,"Agosto":0.790323,"Septiembre":0.877778,"Octubre":0.814516,"Noviembre":0.791667,"Diciembre":0.830645},
+{"Equipo":"PF26","Índices":"Utilización","Unidad":"%","Enero":0.536224,"Febrero":0.545756,"Marzo":0.533995,"Abril":0.513797,"Mayo":0.471590,"Junio":0.553531,"Julio":0.471373,"Agosto":0.519216,"Septiembre":0.574169,"Octubre":0.610835,"Noviembre":0.635786,"Diciembre":0.644238},
+{"Equipo":"PF26","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":45.101,"Febrero":45.101,"Marzo":28.000,"Abril":21.844,"Mayo":21.500,"Junio":20.350,"Julio":22.000,"Agosto":20.299,"Septiembre":23.000,"Octubre":23.441,"Noviembre":21.633,"Diciembre":23.705},
+{"Equipo":"PF26","Índices":"Metros","Unidad":"m","Enero":12703.3,"Febrero":12929.1,"Marzo":11288.0,"Abril":7322.91,"Mayo":7256.62,"Junio":7078.10,"Julio":7018.20,"Agosto":5771.71,"Septiembre":8346.12,"Octubre":8662.16,"Noviembre":7714.53,"Diciembre":9289.91},
+{"Equipo":"PF26","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":281.67,"Febrero":286.67,"Marzo":319.41,"Abril":292.28,"Mayo":246.85,"Junio":315.88,"Julio":319.90,"Agosto":261.63,"Septiembre":346.74,"Octubre":337.65,"Noviembre":347.40,"Diciembre":376.24},
+{"Equipo":"PFAR","Índices":"Disponibilidad","Unidad":"%","Enero":0,"Febrero":0,"Marzo":0,"Abril":0,"Mayo":0,"Junio":0,"Julio":0,"Agosto":0,"Septiembre":0.877778,"Octubre":0.154839,"Noviembre":0.480000,"Diciembre":0.800000},
+{"Equipo":"PFAR","Índices":"Utilización","Unidad":"%","Enero":0,"Febrero":0,"Marzo":0,"Abril":0,"Mayo":0,"Junio":0,"Julio":0,"Agosto":0,"Septiembre":0.574169,"Octubre":0.574676,"Noviembre":0.510524,"Diciembre":0.539195},
+{"Equipo":"PFAR","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":0,"Febrero":0,"Marzo":0,"Abril":0,"Mayo":0,"Junio":0,"Julio":0,"Agosto":0,"Septiembre":23.000,"Octubre":23.000,"Noviembre":47.000,"Diciembre":42.295},
+{"Equipo":"PFAR","Índices":"Metros","Unidad":"m","Enero":0,"Febrero":0,"Marzo":0,"Abril":0,"Mayo":0,"Junio":0,"Julio":0,"Agosto":0,"Septiembre":0,"Octubre":1522.66,"Noviembre":8292.55,"Diciembre":13575.3},
+{"Equipo":"PFAR","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":0,"Febrero":0,"Marzo":0,"Abril":0,"Mayo":0,"Junio":0,"Julio":0,"Agosto":0,"Septiembre":383.72,"Octubre":66.20,"Noviembre":176.44,"Diciembre":320.93},
+{"Equipo":"TOTAL","Índices":"Disponibilidad","Unidad":"%","Enero":0.841251,"Febrero":0.841251,"Marzo":0.846962,"Abril":0.843057,"Mayo":0.831804,"Junio":0.841431,"Julio":0.831045,"Agosto":0.835450,"Septiembre":0.846597,"Octubre":0.810724,"Noviembre":0.844661,"Diciembre":0.817864},
+{"Equipo":"TOTAL","Índices":"Utilización","Unidad":"%","Enero":0.541164,"Febrero":0.539323,"Marzo":0.489982,"Abril":0.541848,"Mayo":0.432008,"Junio":0.498480,"Julio":0.476464,"Agosto":0.508745,"Septiembre":0.542440,"Octubre":0.574666,"Noviembre":0.593365,"Diciembre":0.585700},
+{"Equipo":"TOTAL","Índices":"Rendimiento","Unidad":"m/hr efect","Enero":26.752,"Febrero":26.655,"Marzo":28.961,"Abril":27.776,"Mayo":28.059,"Junio":24.732,"Julio":27.331,"Agosto":28.609,"Septiembre":25.509,"Octubre":28.152,"Noviembre":27.087,"Diciembre":24.792},
+{"Equipo":"TOTAL","Índices":"Metros","Unidad":"m","Enero":65474.8,"Febrero":65014.7,"Marzo":68625.4,"Abril":65811.1,"Mayo":69085.6,"Junio":62434.9,"Julio":61049.4,"Agosto":66454.2,"Septiembre":68258.2,"Octubre":79876.4,"Noviembre":79490.7,"Diciembre":78313.5},
+{"Equipo":"TOTAL","Índices":"Horas Efectivas","Unidad":"Hr ef","Enero":2447.45,"Febrero":2439.12,"Marzo":2231.02,"Abril":2455.80,"Mayo":1931.84,"Junio":2290.24,"Julio":2158.21,"Agosto":2322.82,"Septiembre":2675.89,"Octubre":2837.36,"Noviembre":2934.65,"Diciembre":3158.82}
+];
+
+let DATA = { csv: null, mensual: null, plan: PLAN_DEFAULT };
 const MESES_ORDER = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const INDICES = ['Disponibilidad','Utilización','Rendimiento','Metros','Horas Efectivas'];
 
@@ -379,7 +433,7 @@ function handleFile(type) {
 }
 
 function checkReady() {
-    document.getElementById('btnAnalizar').disabled = !(DATA.csv && DATA.mensual && DATA.plan);
+    document.getElementById('btnAnalizar').disabled = !(DATA.csv && DATA.mensual);
 }
 
 function runAnalysis() {
@@ -424,8 +478,12 @@ function processAndRender() {
 
     let h = '';
 
+    const hasPlan = DATA.plan && DATA.plan.length > 0;
+
     // NAV
-    h += '<nav><a href="#comp">Comparación Mensual</a><a href="#rvp">Real vs Plan</a><a href="#uebd">Códigos UEBD</a><a href="#disp">Disponibilidad UEBD</a><a href="#dem">Demoras Prog/No Prog</a><a href="#mant">Mantención Detalle</a></nav>';
+    h += '<nav><a href="#comp">Comparación Mensual</a>';
+    if(hasPlan) h += '<a href="#rvp">Real vs Plan</a>';
+    h += '<a href="#uebd">Códigos UEBD</a><a href="#disp">Disponibilidad UEBD</a><a href="#dem">Demoras Prog/No Prog</a><a href="#mant">Mantención Detalle</a></nav>';
 
     // KPI
     const lm=mCD[mCD.length-1],pm=mCD.length>1?mCD[mCD.length-2]:null;
@@ -465,7 +523,8 @@ function processAndRender() {
         h+='</div>';
     }
 
-    // 2. REAL vs PLAN
+    // 2. REAL vs PLAN (solo si hay datos de plan)
+    if(hasPlan){
     h+='<div class="section" id="rvp"><div class="section-title">2. Real 2026 vs Plan 2025 (por Mes)</div><p style="color:var(--text-light);margin-bottom:1rem">Compara el valor real contra el plan del mismo mes.</p>';
     mCD.forEach(mes=>{
         h+=`<div class="mes-tab">${mes.toUpperCase()}</div>`;
@@ -489,6 +548,7 @@ function processAndRender() {
         });
     });
     h+='</div>';
+    }
 
     // 3. CÓDIGOS UEBD
     const ct={};let tH=0;
