@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Analisis de Tiempos Operativos - ASARCO</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
   --primary: #1a3a5c;
@@ -170,6 +171,24 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
   </div>
 </div>
 
+<!-- STEP 1b: Upload monthly XLSX (optional) -->
+<div class="card" id="step-upload-mensual">
+  <h2>1b. Cargar Archivo Mensual XLSX (opcional)</h2>
+  <p class="mb-10" style="font-size:0.88rem;color:#666;">
+    Sube el archivo XLSX mensual (ej. <code>MENSUAL 2026.xlsx</code>) para comparar los KPIs oficiales
+    contra los calculados desde el CSV de eventos.
+  </p>
+  <div class="input-row">
+    <div class="file-drop" id="drop-mensual" style="max-width:400px;">
+      <div class="icon">&#128202;</div>
+      <p><b>Archivo XLSX mensual</b><br>Arrastra aqui o haz clic</p>
+      <div class="filename" id="fname-mensual"></div>
+    </div>
+    <input type="file" id="file-mensual" accept=".xlsx,.xls" class="hidden">
+  </div>
+  <div class="file-info hidden" id="mensual-info"></div>
+</div>
+
 <!-- STEP 2: Date ranges -->
 <div class="card" id="step-config">
   <h2>2. Definir Rangos de Tiempo</h2>
@@ -232,6 +251,7 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
     <button class="tab" data-tab="tab-codigos">Impacto Codigos</button>
     <button class="tab" data-tab="tab-diario">Detalle Diario</button>
     <button class="tab" data-tab="tab-mensual">Mensual</button>
+    <button class="tab hidden" data-tab="tab-mensual-comp" id="tab-btn-mensual-comp">Mensual XLSX</button>
     <button class="tab" data-tab="tab-perforadoras">Perforadoras</button>
     <button class="tab" data-tab="tab-charts">Graficos</button>
   </div>
@@ -309,6 +329,24 @@ table tbody tr:nth-child(even):hover { background: #f0f4ff; }
     <div class="input-row mt-10" style="justify-content:flex-end;">
       <button class="btn btn-sm btn-success" onclick="exportCSV('monthly')">Exportar CSV</button>
     </div>
+  </div>
+
+  <!-- Tab: Mensual XLSX Comparison -->
+  <div class="card tab-content hidden" id="tab-mensual-comp">
+    <h2>Comparacion: Mensual XLSX vs Calculado CSV</h2>
+    <p class="mb-10" style="font-size:0.88rem;color:#666;">
+      Compara los valores del archivo XLSX mensual (oficial) contra los calculados desde el CSV de eventos.
+    </p>
+    <div class="input-row mb-10">
+      <div class="input-group">
+        <label>Mes a comparar</label>
+        <select id="mensual-month-filter"></select>
+      </div>
+    </div>
+    <div id="mensual-comp-kpis" class="kpi-grid"></div>
+    <h3>Detalle por Equipo</h3>
+    <div class="chart-container"><canvas id="chart-mensual-comp"></canvas></div>
+    <div class="table-scroll" id="mensual-comp-table"></div>
   </div>
 
   <!-- Tab: Perforadoras -->
@@ -404,6 +442,87 @@ const charts = {};
     reader.readAsText(file, 'utf-8');
   }
 })();
+
+// ===== MENSUAL XLSX HANDLING =====
+let mensualData = null; // parsed monthly data: [{equipo, equipo_norm, indice, unidad, mes_num, mes, valor}]
+
+(function setupMensualDrop() {
+  const drop = document.getElementById('drop-mensual');
+  const input = document.getElementById('file-mensual');
+  const fname = document.getElementById('fname-mensual');
+
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleMensualFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => { if (input.files.length) handleMensualFile(input.files[0]); });
+
+  function handleMensualFile(file) {
+    fname.textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        mensualData = parseMensualRows(json);
+
+        const info = document.getElementById('mensual-info');
+        info.classList.remove('hidden');
+        const equipos = [...new Set(mensualData.map(r => r.equipo))];
+        const meses = [...new Set(mensualData.map(r => r.mes))];
+        info.innerHTML = `<b>${mensualData.length}</b> registros leidos &mdash; <b>${equipos.length}</b> equipos, <b>${meses.length}</b> meses (${meses.join(', ')})`;
+
+        // Show the tab button
+        const tabBtn = document.getElementById('tab-btn-mensual-comp');
+        if (tabBtn) tabBtn.classList.remove('hidden');
+
+      } catch (err) {
+        console.error(err);
+        const info = document.getElementById('mensual-info');
+        info.classList.remove('hidden');
+        info.innerHTML = `<span class="text-danger">Error leyendo XLSX: ${err.message}</span>`;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+})();
+
+const MONTH_NAMES_ES = { 'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+  'julio': 7, 'agosto': 8, 'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12 };
+
+function parseMensualRows(json) {
+  // Each row: {Equipo, Índices/Indices, Unidad, Enero, Febrero, ...}
+  const records = [];
+  for (const row of json) {
+    const equipo = (row['Equipo'] || '').trim();
+    if (!equipo) continue;
+    const equipoNorm = normalizeEquipo(equipo);
+    const indice = (row['Índices'] || row['Indices'] || '').trim();
+    const unidad = (row['Unidad'] || '').trim();
+
+    for (const [colName, colVal] of Object.entries(row)) {
+      const colLower = colName.trim().toLowerCase();
+      const mesNum = MONTH_NAMES_ES[colLower];
+      if (!mesNum) continue;
+      let valor = colVal;
+      if (valor === '' || valor == null) continue;
+      if (typeof valor === 'string') valor = parseFloat(valor.replace(',', '.'));
+      if (isNaN(valor)) continue;
+
+      records.push({
+        equipo, equipo_norm: equipoNorm, indice, indice_key: normalizeText(indice),
+        unidad, mes_num: mesNum, mes: colName.trim(), valor
+      });
+    }
+  }
+  return records;
+}
 
 // ===== CSV PARSER =====
 function parseCSV(text) {
@@ -781,6 +900,7 @@ function renderResults() {
   renderCodeImpactTab(codeImpactUEBD, codeImpactDisp, topN);
   renderDailyTab();
   renderMonthlyTab();
+  if (mensualData && mensualData.length) renderMensualCompTab();
   renderRigTab();
   renderChartsTab();
 
@@ -1042,6 +1162,183 @@ function renderMonthlyTab() {
   ]);
   document.getElementById('monthly-table-container').innerHTML = buildTable(headers, tableRows);
   analysisResult._monthlyExport = allMonthly;
+}
+
+function renderMensualCompTab() {
+  if (!mensualData || !mensualData.length || !analysisResult) return;
+  const { baseData, compData, excludeNorms } = analysisResult;
+
+  // Available months from XLSX
+  const availableMonths = [...new Set(mensualData.map(r => r.mes_num))].sort((a, b) => a - b);
+  const monthFilter = document.getElementById('mensual-month-filter');
+  monthFilter.innerHTML = '';
+  const monthLabels = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  for (const m of availableMonths) {
+    monthFilter.innerHTML += `<option value="${m}">${monthLabels[m]}</option>`;
+  }
+
+  function renderForMonth(mesNum) {
+    // Get XLSX data for this month
+    const xlsxMonth = mensualData.filter(r => r.mes_num === mesNum);
+    if (!xlsxMonth.length) return;
+
+    // Build map: equipo_norm -> {disponibilidad, utilizacion, rendimiento, metros, horas_efectivas}
+    const xlsxMap = {};
+    for (const r of xlsxMonth) {
+      if (!xlsxMap[r.equipo_norm]) xlsxMap[r.equipo_norm] = { label: r.equipo };
+      const key = r.indice_key;
+      if (key.includes('disponibilidad')) xlsxMap[r.equipo_norm].disp = r.valor;
+      else if (key.includes('utilizacion')) xlsxMap[r.equipo_norm].uebd = r.valor;
+      else if (key.includes('rendimiento')) xlsxMap[r.equipo_norm].rend = r.valor;
+      else if (key.includes('metros')) xlsxMap[r.equipo_norm].metros = r.valor;
+      else if (key.includes('horas') || key.includes('hr')) xlsxMap[r.equipo_norm].he = r.valor;
+    }
+
+    // Get CSV-calculated data for same month (YYYY-MM format)
+    const targetYM = '2026-' + String(mesNum).padStart(2, '0');
+
+    // Per-rig monthly from CSV: combine base + comp daily metrics
+    const csvRigMonthly = {};
+    const allDailyMetrics = { ...baseData.dailyMetrics, ...compData.dailyMetrics };
+    for (const [dateStr, rigs] of Object.entries(allDailyMetrics)) {
+      if (dateStr.slice(0, 7) !== targetYM) continue;
+      for (const [rigNorm, m] of Object.entries(rigs)) {
+        if (!csvRigMonthly[rigNorm]) csvRigMonthly[rigNorm] = { label: m.label, ht: 0, he: 0, hr: 0, hmp: 0, hmnp: 0, ho: 0, days: 0 };
+        const c = csvRigMonthly[rigNorm];
+        c.ht += m.ht; c.he += m.he; c.hr += m.hr; c.hmp += m.hmp; c.hmnp += m.hmnp; c.ho += m.ho; c.days++;
+      }
+    }
+
+    // Build comparison rows
+    const allEquipos = new Set([...Object.keys(xlsxMap), ...Object.keys(csvRigMonthly)]);
+    const rows = [];
+    let totXlsxDisp = null, totXlsxUebd = null, totXlsxHe = null;
+    let totCsvHt = 0, totCsvHe = 0, totCsvHop = 0;
+    let totCsvRigs = 0;
+
+    for (const eqNorm of [...allEquipos].sort()) {
+      if (eqNorm === 'TOTAL' || eqNorm === 'FLOTA') {
+        // Store XLSX totals separately
+        if (xlsxMap[eqNorm]) {
+          totXlsxDisp = xlsxMap[eqNorm].disp;
+          totXlsxUebd = xlsxMap[eqNorm].uebd;
+          totXlsxHe = xlsxMap[eqNorm].he;
+        }
+        continue;
+      }
+
+      const xlsx = xlsxMap[eqNorm] || {};
+      const csv = csvRigMonthly[eqNorm];
+      const label = xlsx.label || (csv ? csv.label : eqNorm);
+
+      let csvDisp = null, csvUebd = null, csvHe = null;
+      if (csv) {
+        const hop = csv.ht - csv.hmp - csv.hmnp;
+        csvDisp = csv.ht > 0 ? Math.max(hop, 0) / csv.ht : null;
+        csvUebd = hop > 0 ? csv.he / Math.max(hop, 0) : null;
+        csvHe = csv.he;
+        if (!excludeNorms.has(eqNorm)) {
+          totCsvHt += csv.ht; totCsvHe += csv.he; totCsvHop += Math.max(hop, 0);
+          totCsvRigs++;
+        }
+      }
+
+      // XLSX values: disp and uebd come as ratios (0-1)
+      const xlsxDisp = xlsx.disp != null ? xlsx.disp : null;
+      const xlsxUebd = xlsx.uebd != null ? xlsx.uebd : null;
+      const xlsxHe = xlsx.he != null ? xlsx.he : null;
+
+      // Convert to percentages for display (XLSX is 0-1 ratio)
+      const xlsxDispPct = xlsxDisp != null ? (xlsxDisp <= 1 ? xlsxDisp * 100 : xlsxDisp) : null;
+      const xlsxUebdPct = xlsxUebd != null ? (xlsxUebd <= 1 ? xlsxUebd * 100 : xlsxUebd) : null;
+      const csvDispPct = csvDisp != null ? csvDisp * 100 : null;
+      const csvUebdPct = csvUebd != null ? csvUebd * 100 : null;
+
+      rows.push({
+        equipo: label, norm: eqNorm,
+        xlsxDisp: xlsxDispPct, csvDisp: csvDispPct,
+        xlsxUebd: xlsxUebdPct, csvUebd: csvUebdPct,
+        xlsxHe, csvHe,
+        xlsxMetros: xlsx.metros, xlsxRend: xlsx.rend
+      });
+    }
+
+    // Fleet totals from CSV
+    const totCsvDispPct = totCsvHt > 0 ? (totCsvHop / totCsvHt) * 100 : null;
+    const totCsvUebdPct = totCsvHop > 0 ? (totCsvHe / totCsvHop) * 100 : null;
+    const totXlsxDispPct = totXlsxDisp != null ? (totXlsxDisp <= 1 ? totXlsxDisp * 100 : totXlsxDisp) : null;
+    const totXlsxUebdPct = totXlsxUebd != null ? (totXlsxUebd <= 1 ? totXlsxUebd * 100 : totXlsxUebd) : null;
+
+    // KPIs
+    const dDisp = (totXlsxDispPct != null && totCsvDispPct != null) ? totCsvDispPct - totXlsxDispPct : null;
+    const dUebd = (totXlsxUebdPct != null && totCsvUebdPct != null) ? totCsvUebdPct - totXlsxUebdPct : null;
+    const dHe = (totXlsxHe != null && totCsvHe != null) ? totCsvHe - totXlsxHe : null;
+
+    document.getElementById('mensual-comp-kpis').innerHTML = `
+      <div class="kpi-box highlight"><div class="kpi-label">Disp XLSX (Flota)</div><div class="kpi-value">${totXlsxDispPct != null ? totXlsxDispPct.toFixed(2) + '%' : 'N/D'}</div></div>
+      <div class="kpi-box highlight"><div class="kpi-label">Disp CSV (Flota)</div><div class="kpi-value">${totCsvDispPct != null ? totCsvDispPct.toFixed(2) + '%' : 'N/D'}</div></div>
+      <div class="kpi-box"><div class="kpi-label">Delta Disp</div><div class="kpi-value ${dDisp != null ? (dDisp >= 0 ? 'text-success' : 'text-danger') : ''}">${dDisp != null ? (dDisp >= 0 ? '+' : '') + dDisp.toFixed(2) + ' pp' : 'N/D'}</div></div>
+      <div class="kpi-box highlight"><div class="kpi-label">UEBD XLSX (Flota)</div><div class="kpi-value">${totXlsxUebdPct != null ? totXlsxUebdPct.toFixed(2) + '%' : 'N/D'}</div></div>
+      <div class="kpi-box highlight"><div class="kpi-label">UEBD CSV (Flota)</div><div class="kpi-value">${totCsvUebdPct != null ? totCsvUebdPct.toFixed(2) + '%' : 'N/D'}</div></div>
+      <div class="kpi-box"><div class="kpi-label">Delta UEBD</div><div class="kpi-value ${dUebd != null ? (dUebd >= 0 ? 'text-success' : 'text-danger') : ''}">${dUebd != null ? (dUebd >= 0 ? '+' : '') + dUebd.toFixed(2) + ' pp' : 'N/D'}</div></div>
+      <div class="kpi-box"><div class="kpi-label">Hrs Efect XLSX</div><div class="kpi-value">${totXlsxHe != null ? totXlsxHe.toFixed(0) : 'N/D'}</div></div>
+      <div class="kpi-box"><div class="kpi-label">Hrs Efect CSV</div><div class="kpi-value">${totCsvHe != null ? totCsvHe.toFixed(0) : 'N/D'}</div></div>
+    `;
+
+    // Chart: grouped bar per rig
+    const rigLabels = rows.filter(r => !excludeNorms.has(r.norm)).map(r => r.equipo);
+    const rigsFiltered = rows.filter(r => !excludeNorms.has(r.norm));
+
+    destroyChart('chart-mensual-comp');
+    charts['chart-mensual-comp'] = new Chart(document.getElementById('chart-mensual-comp').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: rigLabels,
+        datasets: [
+          { label: 'Disp XLSX %', data: rigsFiltered.map(r => r.xlsxDisp), backgroundColor: '#3498db' },
+          { label: 'Disp CSV %', data: rigsFiltered.map(r => r.csvDisp), backgroundColor: '#e74c3c' },
+          { label: 'UEBD XLSX %', data: rigsFiltered.map(r => r.xlsxUebd), backgroundColor: '#2ecc71' },
+          { label: 'UEBD CSV %', data: rigsFiltered.map(r => r.csvUebd), backgroundColor: '#e67e22' },
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' },
+        title: { display: true, text: `${monthLabels[mesNum]} — XLSX vs CSV por Equipo` } },
+        scales: { y: { min: 0, max: 100, title: { display: true, text: '%' } } } }
+    });
+
+    // Table
+    const fmtPct = v => v != null ? v.toFixed(2) : '-';
+    const fmtDelta = (a, b) => {
+      if (a == null || b == null) return '-';
+      const d = b - a;
+      return colorVal(d, 2) + ' pp';
+    };
+    const fmtH = v => v != null ? v.toFixed(1) : '-';
+
+    const headers = ['Equipo', 'Disp XLSX', 'Disp CSV', 'Delta', 'UEBD XLSX', 'UEBD CSV', 'Delta', 'HrsEf XLSX', 'HrsEf CSV', 'Delta', 'Metros XLSX', 'Rend XLSX'];
+    const tableRows = rows.map(r => [
+      r.equipo,
+      fmtPct(r.xlsxDisp), fmtPct(r.csvDisp), fmtDelta(r.xlsxDisp, r.csvDisp),
+      fmtPct(r.xlsxUebd), fmtPct(r.csvUebd), fmtDelta(r.xlsxUebd, r.csvUebd),
+      fmtH(r.xlsxHe), fmtH(r.csvHe), r.xlsxHe != null && r.csvHe != null ? colorVal(r.csvHe - r.xlsxHe, 1) + ' h' : '-',
+      r.xlsxMetros != null ? r.xlsxMetros.toFixed(0) : '-',
+      r.xlsxRend != null ? r.xlsxRend.toFixed(2) : '-'
+    ]);
+    // Add totals row
+    tableRows.push([
+      '<b>FLOTA</b>',
+      `<b>${fmtPct(totXlsxDispPct)}</b>`, `<b>${fmtPct(totCsvDispPct)}</b>`, `<b>${fmtDelta(totXlsxDispPct, totCsvDispPct)}</b>`,
+      `<b>${fmtPct(totXlsxUebdPct)}</b>`, `<b>${fmtPct(totCsvUebdPct)}</b>`, `<b>${fmtDelta(totXlsxUebdPct, totCsvUebdPct)}</b>`,
+      `<b>${fmtH(totXlsxHe)}</b>`, `<b>${fmtH(totCsvHe)}</b>`,
+      dHe != null ? `<b>${colorVal(dHe, 1)} h</b>` : '-', '', ''
+    ]);
+
+    document.getElementById('mensual-comp-table').innerHTML = buildTable(headers, tableRows);
+  }
+
+  // Initial render
+  renderForMonth(availableMonths[availableMonths.length - 1]);
+  monthFilter.onchange = () => renderForMonth(parseInt(monthFilter.value));
 }
 
 function renderRigTab() {
